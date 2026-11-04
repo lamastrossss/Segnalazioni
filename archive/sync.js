@@ -118,11 +118,13 @@ function srDocFor_(cfg, props, project) {
   if (id) { try { doc = DocumentApp.openById(id); } catch (e) { doc = null; } }
   if (!doc) {
     doc = DocumentApp.create('Stage Review — ' + project.name);
+    props.setProperty('doc:' + project.id, doc.getId()); // subito: un errore dopo non crea Doc doppi
     DriveApp.getFileById(doc.getId()).moveTo(DriveApp.getFolderById(cfg.folder));
     var body = doc.getBody();
-    body.getChild(0).asParagraph().setText('Stage Review — ' + project.name).setHeading(DocumentApp.ParagraphHeading.TITLE);
+    var title = body.getChild(0).asParagraph();
+    title.setText('Stage Review — ' + project.name); // setText non restituisce il paragrafo: niente catene
+    title.setHeading(DocumentApp.ParagraphHeading.TITLE);
     body.appendParagraph('Archivio automatico delle segnalazioni, aggiornato ogni 10 minuti. Non modificare i blocchi delle segnalazioni: il testo scritto fuori dai blocchi resta intatto.');
-    props.setProperty('doc:' + project.id, doc.getId());
     srRest_(cfg, 'patch', '/rest/v1/projects?id=eq.' + project.id, { archive_doc_url: doc.getUrl() });
   }
   return doc;

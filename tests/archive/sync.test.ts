@@ -7,7 +7,8 @@ import vm from 'node:vm';
 class P {
   text: string; heading = 'NORMAL'; images: { w: number; h: number }[] = []; hr = false; link: string | null = null; bold = false;
   constructor(t: string) { this.text = t; }
-  setText(t: string) { this.text = t; return this; }
+  // Come in Apps Script: Paragraph.setText non restituisce niente (non si può concatenare)
+  setText(t: string): void { this.text = t; }
   setHeading(h: string) { this.heading = h; return this; }
   appendInlineImage(blob: { bad?: boolean }) {
     if (blob.bad) throw new Error('Invalid image data');
