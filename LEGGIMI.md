@@ -19,9 +19,10 @@ Funziona su Chrome desktop. Tutto gratuito: GitHub Pages + Supabase (piano free)
 5. Gli sviluppatori lavorano dalla board: filtri, stato, risposte, *Apri nel sito*.
 
 ## Setup (una volta)
-1. **Database.** In Supabase → *SQL Editor* incolla ed esegui, in ordine:
-   `supabase/migrations/001_schema.sql`, `002_rls.sql`, `003_storage_realtime.sql`.
-   Poi esegui `supabase/tests/rls-check.sql`: deve rispondere **RLS OK**.
+1. **Database.** In Supabase → *SQL Editor* incolla ed esegui `supabase/setup-database.sql`
+   (le migrazioni 001-003 in un file). Poi, in una **query separata**, esegui
+   `supabase/tests/rls-check.sql`: deve rispondere **RLS OK**. Non unirli: il controllo
+   annulla tutto ciò che è nella stessa esecuzione.
 2. **Auth.** Supabase → *Authentication → Sign In / Providers → Email*: lascia attivo
    *Confirm email*. In *URL Configuration* imposta *Site URL* a
    `https://lamastrossss.github.io/Segnalazioni/`.
