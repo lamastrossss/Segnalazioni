@@ -93,7 +93,7 @@ begin
   begin delete from public.issues where body = 'due'; exception when insufficient_privilege then null; end;
   begin delete from public.replies; exception when insufficient_privilege then null; end;
   begin delete from public.projects; exception when insufficient_privilege then null; end;
-  delete from storage.objects where bucket_id = 'media';
+  begin delete from storage.objects where bucket_id = 'media'; exception when others then null; end;
   if (select count(*) from public.issues) <> 2 then raise exception 'FAIL: segnalazioni cancellate davvero'; end if;
   if (select count(*) from public.replies) <> 1 then raise exception 'FAIL: risposte cancellate davvero'; end if;
   if (select count(*) from storage.objects where bucket_id = 'media') <> 1 then raise exception 'FAIL: file cancellati davvero'; end if;
