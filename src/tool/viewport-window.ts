@@ -42,6 +42,7 @@ export function openViewportWindow(win: Window, presetId: ViewportClass, toolSrc
       pw.__stageReviewLoading = true;
       const s = doc.createElement('script');
       s.src = `${toolSrc}?v=${Date.now()}`;
+      s.onerror = () => { pw.__stageReviewLoading = false; };
       doc.documentElement.append(s);
       fit(0);
     } catch { /* pagina di un altro dominio: niente tool in questa finestra */ }

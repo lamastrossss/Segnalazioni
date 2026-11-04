@@ -36,7 +36,10 @@ describe('screenshot tramite estensione', () => {
     const gdm = vi.fn();
     Object.defineProperty(navigator, 'mediaDevices', { value: { getDisplayMedia: gdm }, configurable: true });
     expect(hasExtensionBridge(document)).toBe(true);
+    const ok = (e: MessageEvent) => { if (e.data?.type === 'capture') window.postMessage({ source: 'stage-review-ext', type: 'capture-result', id: e.data.id, dataUrl: 'data:ok' }, '*'); };
+    window.addEventListener('message', ok);
     expect(await createCapturer(window).start()).toBe(true);
+    window.removeEventListener('message', ok);
     expect(gdm).not.toHaveBeenCalled();
   });
 
@@ -67,5 +70,41 @@ describe('screenshot tramite estensione', () => {
     await vi.advanceTimersByTimeAsync(3500);
     expect(await p).toBeNull();
     expect(hide.style.visibility).toBe('');
+  });
+});
+
+describe('ripieghi dello screenshot via estensione', () => {
+  afterEach(() => { delete document.documentElement.dataset.stageReviewExt; vi.restoreAllMocks(); });
+  const answer = (dataUrl: string | null) => (e: MessageEvent) => {
+    if (e.data?.source === 'stage-review' && e.data?.type === 'capture') {
+      window.postMessage({ source: 'stage-review-ext', type: 'capture-result', id: e.data.id, dataUrl }, '*');
+    }
+  };
+
+  it('se l\'estensione non può fotografare questa scheda, ripiega su "Condividi scheda"', async () => {
+    document.documentElement.dataset.stageReviewExt = '1';
+    const gdm = vi.fn(() => Promise.reject(new Error('NotAllowed')));
+    Object.defineProperty(navigator, 'mediaDevices', { value: { getDisplayMedia: gdm }, configurable: true });
+    const l = answer(null); window.addEventListener('message', l);
+    await createCapturer(window).start();
+    window.removeEventListener('message', l);
+    expect(gdm).toHaveBeenCalled();
+  });
+
+  it('se l\'estensione fotografa, non chiede niente', async () => {
+    document.documentElement.dataset.stageReviewExt = '1';
+    const gdm = vi.fn();
+    Object.defineProperty(navigator, 'mediaDevices', { value: { getDisplayMedia: gdm }, configurable: true });
+    const l = answer('data:ok'); window.addEventListener('message', l);
+    expect(await createCapturer(window).start()).toBe(true);
+    window.removeEventListener('message', l);
+    expect(gdm).not.toHaveBeenCalled();
+  });
+
+  it('funziona anche dove crypto.randomUUID non esiste (pagine http)', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockImplementation(() => { throw new TypeError('not a secure context'); });
+    const l = answer('data:x'); window.addEventListener('message', l);
+    expect(await requestBridgeCapture(window)).toBe('data:x');
+    window.removeEventListener('message', l);
   });
 });

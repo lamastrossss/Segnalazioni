@@ -60,4 +60,17 @@ describe('ponte', () => {
     await flush();
     expect(sendMessage).toHaveBeenCalledTimes(1);
   });
+  it('estensione aggiornata o ricaricata: toglie il segno e risponde null (ripiego possibile)', async () => {
+    openTool();
+    sendMessage.mockImplementationOnce(() => { throw new Error('Extension context invalidated.'); });
+    const replies: any[] = [];
+    const listen = (e: MessageEvent) => { if (e.data?.source === 'stage-review-ext') replies.push(e.data); };
+    window.addEventListener('message', listen);
+    post({ source: 'stage-review', type: 'capture', id: 'old' });
+    await flush(); await flush();
+    window.removeEventListener('message', listen);
+    expect(replies[0]).toMatchObject({ id: 'old', dataUrl: null });
+    expect(document.documentElement.dataset.stageReviewExt).toBeUndefined();
+    document.documentElement.dataset.stageReviewExt = '1';
+  });
 });

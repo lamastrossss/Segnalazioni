@@ -39,25 +39,25 @@ describe('menu dell\'icona', () => {
     box.checked = true; box.dispatchEvent(new Event('change')); await flush();
     expect(f.chrome.permissions.request).toHaveBeenCalledWith({ origins: ['https://rica.myshopify.com/*'] });
     expect(box.checked).toBe(false);
-    expect(f.store.alwaysOn).toBeUndefined();
+    expect(f.granted.size).toBe(0);
   });
   it('permesso concesso: salva il sito, apre il tool e mostra ON', async () => {
     const f = createFakeChrome({ activeTab: { id: 1, url }, pageResult: (inj: any) => (inj.args ? 'opened' : false) });
     await initPopup(document, f.chrome, opts);
     const box = q<HTMLInputElement>('#sr-always')!;
     box.checked = true; box.dispatchEvent(new Event('change')); await flush(); await flush();
-    expect(f.store.alwaysOn).toEqual(['https://rica.myshopify.com']);
+    expect(f.granted.has('https://rica.myshopify.com/*')).toBe(true);
     expect(f.lastMode()).toBe('auto');
     expect(f.badges.at(-1)).toEqual({ tabId: 1, text: 'ON' });
   });
   it('spegnendo l\'interruttore toglie il sito', async () => {
     const f = createFakeChrome({ activeTab: { id: 1, url }, pageResult: false });
-    f.store.alwaysOn = ['https://rica.myshopify.com']; f.grant('https://rica.myshopify.com/*');
+    f.grant('https://rica.myshopify.com/*'); // permesso concesso = sempre attivo (anche se il menu si era chiuso prima di salvare)
     await initPopup(document, f.chrome, opts);
     const box = q<HTMLInputElement>('#sr-always')!;
     expect(box.checked).toBe(true);
     box.checked = false; box.dispatchEvent(new Event('change')); await flush(); await flush();
-    expect(f.store.alwaysOn).toEqual([]);
+    expect(f.granted.size).toBe(0);
     expect(f.badges.at(-1)).toEqual({ tabId: 1, text: '' });
   });
   it('avvisa se c\'è una versione più nuova', async () => {

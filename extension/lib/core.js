@@ -36,12 +36,15 @@ export function isActiveProbe() {
   return !!window.__stageReview;
 }
 
+/**
+ * "Sempre attivo" su un sito = permesso concesso per quel sito (richiesto dal menu dell'icona).
+ * Il permesso è l'unica fonte di verità: resta valido anche se il menu si chiude durante la richiesta.
+ */
 export function createController(chrome, { toolUrl, now = () => Date.now() }) {
   let lastCapture = -Infinity;
 
-  async function getAlwaysOn() {
-    const { alwaysOn = [] } = await chrome.storage.sync.get('alwaysOn');
-    return Array.isArray(alwaysOn) ? alwaysOn : [];
+  async function isAlwaysOn(origin) {
+    try { return await chrome.permissions.contains({ origins: [origin + '/*'] }); } catch { return false; }
   }
 
   async function inject(tabId, mode) {
@@ -58,7 +61,7 @@ export function createController(chrome, { toolUrl, now = () => Date.now() }) {
 
   return {
     inject,
-    getAlwaysOn,
+    isAlwaysOn,
 
     async toggle(tab) {
       if (!tab?.id || !isScriptable(tab.url)) return 'unsupported';
@@ -76,26 +79,22 @@ export function createController(chrome, { toolUrl, now = () => Date.now() }) {
     },
 
     async setAlwaysOn(origin, on) {
-      const list = await getAlwaysOn();
-      const next = on ? [...new Set([...list, origin])] : list.filter(o => o !== origin);
-      await chrome.storage.sync.set({ alwaysOn: next });
-      if (!on) {
-        try { await chrome.permissions.remove({ origins: [origin + '/*'] }); } catch { /* già revocato */ }
-      }
+      if (on) return; // il permesso lo concede l'utente dal menu (chrome.permissions.request)
+      try { await chrome.permissions.remove({ origins: [origin + '/*'] }); } catch { /* già revocato */ }
     },
 
     async onTabUpdated(tabId, info, tab) {
       try {
         if (info?.status !== 'complete' || !isScriptable(tab?.url)) return;
-        const origin = originOf(tab.url);
-        if (!(await getAlwaysOn()).includes(origin)) return;
-        if (!(await chrome.permissions.contains({ origins: [origin + '/*'] }))) return;
-        await inject(tabId, 'auto');
+        if (!(await isAlwaysOn(originOf(tab.url)))) return;
+        if ((await inject(tabId, 'auto')) === 'error') return;
         await chrome.action.setBadgeText({ tabId, text: 'ON' });
       } catch { /* scheda chiusa o non accessibile */ }
     },
 
+    /** Solo dal frame principale della scheda visibile: un'altra scheda non può farsi fotografare quella attiva. */
     async capture(sender) {
+      if (sender?.frameId !== 0 || !sender?.tab?.active) return null;
       const t = now();
       if (t - lastCapture < CAPTURE_MIN_INTERVAL_MS) return null;
       lastCapture = t;

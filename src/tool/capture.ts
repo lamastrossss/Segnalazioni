@@ -19,7 +19,8 @@ export function hasExtensionBridge(doc: Document): boolean {
 
 /** Chiede uno screenshot all'estensione. Restituisce un data URL JPEG oppure null. */
 export function requestBridgeCapture(win: Window, timeoutMs = BRIDGE_TIMEOUT_MS): Promise<string | null> {
-  const id = crypto.randomUUID();
+  // niente crypto.randomUUID: non esiste sulle pagine http (contesto non sicuro)
+  const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
   return new Promise(resolve => {
     const done = (v: string | null) => { clearTimeout(timer); win.removeEventListener('message', onMsg); resolve(v); };
     const onMsg = (e: MessageEvent) => {
@@ -52,6 +53,9 @@ export function createCapturer(win: Window): Capturer {
     ]);
   }
 
+  let bridgeUnavailable = false;
+  const useBridge = () => hasExtensionBridge(win.document) && !bridgeUnavailable;
+
   function drawPin(g: OffscreenCanvasRenderingContext2D, pin: { x: number; y: number }, color: string, k: number) {
     g.beginPath();
     g.arc(pin.x * k, pin.y * k, PIN_RADIUS * k, 0, Math.PI * 2);
@@ -66,6 +70,8 @@ export function createCapturer(win: Window): Capturer {
     try {
       await nextFrame(); await nextFrame();
       dataUrl = await requestBridgeCapture(win);
+    } catch {
+      dataUrl = null;
     } finally {
       hide.style.visibility = prev;
     }
@@ -85,7 +91,13 @@ export function createCapturer(win: Window): Capturer {
 
   return {
     async start() {
-      if (hasExtensionBridge(win.document)) return true; // l'estensione fotografa senza chiedere
+      if (useBridge()) {
+        // Prova: Chrome permette all'estensione di fotografare questa scheda? (no in schede/finestre
+        // dove non si è cliccata l'icona). Se no, si ripiega su "Condividi scheda".
+        const probe = await requestBridgeCapture(win).catch(() => null);
+        if (probe) return true;
+        bridgeUnavailable = true;
+      }
       if (stream) return true;
       try {
         const md = win.navigator.mediaDevices;
@@ -107,7 +119,7 @@ export function createCapturer(win: Window): Capturer {
     },
 
     async grab({ hide, pin, color = '#E4572E' }) {
-      if (hasExtensionBridge(win.document)) return grabViaBridge(hide, pin, color);
+      if (useBridge()) return grabViaBridge(hide, pin, color);
       if (!stream || !video || !video.videoWidth) return null;
       const prev = hide.style.visibility;
       hide.style.visibility = 'hidden';

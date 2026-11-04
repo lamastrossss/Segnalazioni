@@ -3,7 +3,7 @@
   "name": "Stage Review",
   "version": "1.0.0",
   "description": "Segnalazioni con pin, screenshot e viewport direttamente sugli stage — The Wave Studio.",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": ["activeTab", "scripting"],
   "optional_host_permissions": ["https://*/*", "http://*/*"],
   "background": { "service_worker": "background.js", "type": "module" },
   "action": {

@@ -38,13 +38,13 @@ describe('controller', () => {
     const c = createController(f.chrome, { toolUrl: TOOL });
     expect(await c.toggle(tab)).toBe('error');
   });
-  it('sempre attivo: solo a pagina caricata, origine in elenco e permesso presente', async () => {
+  it('sempre attivo = permesso concesso per il sito; solo a pagina caricata', async () => {
     const f = createFakeChrome();
     const c = createController(f.chrome, { toolUrl: TOOL });
-    await c.setAlwaysOn('https://rica.myshopify.com', true);
     await c.onTabUpdated(1, { status: 'complete' }, tab);
-    expect(f.injections()).toHaveLength(0); // manca il permesso
+    expect(f.injections()).toHaveLength(0); // nessun permesso
     f.grant('https://rica.myshopify.com/*');
+    expect(await c.isAlwaysOn('https://rica.myshopify.com')).toBe(true);
     await c.onTabUpdated(1, { status: 'loading' }, tab);
     expect(f.injections()).toHaveLength(0);
     await c.onTabUpdated(1, { status: 'complete' }, tab);
@@ -53,27 +53,30 @@ describe('controller', () => {
     await c.onTabUpdated(2, { status: 'complete' }, { id: 2, url: 'https://altro.com/' });
     expect(f.injections()).toHaveLength(1);
   });
-  it('spegnere sempre attivo toglie l\'origine e revoca il permesso', async () => {
+  it('se l\'iniezione fallisce non mostra ON', async () => {
+    const f = createFakeChrome();
+    f.grant('https://rica.myshopify.com/*');
+    f.chrome.scripting.executeScript = async () => { throw new Error('x'); };
+    await createController(f.chrome, { toolUrl: TOOL }).onTabUpdated(1, { status: 'complete' }, tab);
+    expect(f.badges).toHaveLength(0);
+  });
+  it('spegnere sempre attivo revoca il permesso', async () => {
     const f = createFakeChrome();
     const c = createController(f.chrome, { toolUrl: TOOL });
     f.grant('https://rica.myshopify.com/*');
-    await c.setAlwaysOn('https://rica.myshopify.com', true);
     await c.setAlwaysOn('https://rica.myshopify.com', false);
-    expect(await c.getAlwaysOn()).toEqual([]);
-    expect(f.granted.has('https://rica.myshopify.com/*')).toBe(false);
+    expect(await c.isAlwaysOn('https://rica.myshopify.com')).toBe(false);
   });
-  it('capture: massimo una ogni 500 ms (Review Focus 3)', async () => {
-    let t = 1000;
+  it('capture solo dal frame principale della scheda visibile (Review Focus 3)', async () => {
     const f = createFakeChrome();
-    const c = createController(f.chrome, { toolUrl: TOOL, now: () => t });
-    expect(await c.capture({ tab })).toBe('data:img');
-    expect(await c.capture({ tab })).toBeNull();
-    t += 600;
-    expect(await c.capture({ tab })).toBe('data:img');
+    const c = createController(f.chrome, { toolUrl: TOOL });
+    expect(await c.capture({ tab: { ...tab, active: false }, frameId: 0 })).toBeNull();
+    expect(await c.capture({ tab: { ...tab, active: true }, frameId: 3 })).toBeNull();
+    expect(await c.capture({ tab: { ...tab, active: true }, frameId: 0 })).toBe('data:img');
   });
   it('capture senza permesso restituisce null', async () => {
     const f = createFakeChrome({ captureFails: true });
-    expect(await createController(f.chrome, { toolUrl: TOOL }).capture({ tab })).toBeNull();
+    expect(await createController(f.chrome, { toolUrl: TOOL }).capture({ tab: { ...tab, active: true }, frameId: 0 })).toBeNull();
   });
   it('isActive interroga la pagina', async () => {
     const f = createFakeChrome({ pageResult: true });

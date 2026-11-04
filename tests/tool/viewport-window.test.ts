@@ -72,3 +72,18 @@ describe('finestre viewport e caricamento in corso', () => {
     vi.useRealTimers();
   });
 });
+
+describe('finestre viewport: errore di caricamento', () => {
+  it('se tool.js non si carica, il flag torna libero', () => {
+    vi.useFakeTimers();
+    const doc = document.implementation.createHTMLDocument('p');
+    Object.defineProperty(doc, 'readyState', { value: 'complete' });
+    const popup: any = { document: doc, innerWidth: 375, closed: false, resizeBy: vi.fn(), location: { href: 'https://x/a' } };
+    openViewportWindow({ open: () => popup, location: { href: 'https://x/a' } } as unknown as Window, 'mobile', 'https://u/tool.js');
+    vi.advanceTimersByTime(600);
+    doc.querySelector('script')!.dispatchEvent(new Event('error'));
+    expect(popup.__stageReviewLoading).toBe(false);
+    popup.closed = true; vi.advanceTimersByTime(600);
+    vi.useRealTimers();
+  });
+});

@@ -34,11 +34,7 @@ export async function initPopup(doc, chrome, { toolBase, version, fetchVersion =
 
   const controller = createController(chrome, { toolUrl: toolBase + 'tool.js' });
   const origin = originOf(tab.url);
-  const [active, list, granted] = await Promise.all([
-    controller.isActive(tab),
-    controller.getAlwaysOn(),
-    chrome.permissions.contains({ origins: [origin + '/*'] }).catch(() => false),
-  ]);
+  const [active, alwaysOn] = await Promise.all([controller.isActive(tab), controller.isAlwaysOn(origin)]);
 
   const error = h(doc, 'p', { class: 'error', role: 'alert' });
   const toggle = h(doc, 'button', { id: 'sr-toggle', class: 'btn', type: 'button', text: active ? 'Chiudi Stage Review' : 'Apri Stage Review' });
@@ -51,16 +47,14 @@ export async function initPopup(doc, chrome, { toolBase, version, fetchVersion =
   });
 
   const always = h(doc, 'input', { id: 'sr-always', type: 'checkbox' });
-  always.checked = list.includes(origin) && granted;
+  always.checked = alwaysOn;
   always.addEventListener('change', async () => {
     error.textContent = '';
     if (always.checked) {
       // La richiesta va fatta subito, dentro il gesto dell'utente
       const ok = await chrome.permissions.request({ origins: [origin + '/*'] }).catch(() => false);
       if (!ok) { always.checked = false; error.textContent = 'Permesso non concesso: il tool non si riaprirà da solo.'; return; }
-      await controller.setAlwaysOn(origin, true);
-      await controller.inject(tab.id, 'auto');
-      await chrome.action.setBadgeText({ tabId: tab.id, text: 'ON' });
+      if ((await controller.inject(tab.id, 'auto')) !== 'error') await chrome.action.setBadgeText({ tabId: tab.id, text: 'ON' });
     } else {
       await controller.setAlwaysOn(origin, false);
       await chrome.action.setBadgeText({ tabId: tab.id, text: '' });
