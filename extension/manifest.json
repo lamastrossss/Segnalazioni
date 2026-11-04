@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Stage Review",
+  "version": "1.0.0",
+  "description": "Segnalazioni con pin, screenshot e viewport direttamente sugli stage — The Wave Studio.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": {
+    "default_title": "Stage Review",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  },
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "commands": {
+    "toggle-stage-review": {
+      "suggested_key": { "default": "Alt+Shift+R", "mac": "Alt+Shift+R" },
+      "description": "Apri o chiudi Stage Review"
+    }
+  }
+}
