@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="it">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Stage finto · harness</title>
+<style>
+  body { margin: 0; font: 16px/1.5 Georgia, serif; color: #2b2b2b; background: #f6f1ea; }
+  header { position: sticky; top: 0; background: #fff; padding: 16px 24px; display: flex; gap: 24px; align-items: center; box-shadow: 0 1px 0 #e5ddd2; }
+  header strong { font-size: 22px; letter-spacing: .08em; }
+  nav a { margin-right: 16px; color: inherit; }
+  .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; padding: 48px 24px; align-items: center; }
+  .hero h1 { font-size: 44px; margin: 0 0 12px; }
+  .hero .img { aspect-ratio: 4/5; background: linear-gradient(160deg, #d8c3a5, #8e7d6a); border-radius: 4px; }
+  .btn { display: inline-block; background: #2b2b2b; color: #fff; padding: 12px 22px; text-decoration: none; }
+  section.long { padding: 24px; height: 900px; }
+  @media (max-width: 767px) { .hero { grid-template-columns: 1fr; } .hero h1 { font-size: 32px; } }
+</style></head>
+<body>
+  <header><strong>RICA</strong><nav><a href="#">Shop</a><a href="#">Rituali</a><a href="#">Chi siamo</a></nav></header>
+  <div class="hero"><div><h1>Opuntia Oil Mask</h1><p>Maschera nutriente con olio di fico d'India per capelli secchi e sfibrati.</p><a class="btn" href="#">Aggiungi al carrello</a></div><div class="img"></div></div>
+  <section class="long"><h2>Come si usa</h2><p>Applica sulle lunghezze, lascia in posa 10 minuti, risciacqua.</p></section>
+  <script type="module" src="./harness.ts"></script>
+</body>
+</html>

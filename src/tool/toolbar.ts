@@ -13,21 +13,28 @@ export function initials(name: string): string {
 }
 
 export function createToolbar(shadow: ShadowRoot, projectName: string, h: ToolbarHandlers) {
-  const tb = (text: string, title: string, on: () => void, extra = '') =>
-    el('button', { class: `sr-tb ${extra}`, text, attrs: { type: 'button', title, 'aria-pressed': 'false' }, on: { click: on } });
+  const label = (long: string, short: string) => [el('span', { class: 'sr-long', text: long }), el('span', { class: 'sr-short', text: short })];
+  const tb = (content: (Node | string)[], title: string, on: () => void, extra = '') =>
+    el('button', { class: `sr-tb ${extra}`, attrs: { type: 'button', title, 'aria-label': title, 'aria-pressed': 'false' }, on: { click: on } }, content);
 
-  const comment = tb('Commenta', 'Modalità Commenta (tasto C)', h.onToggleComment, 'sr-primary');
-  comment.append(el('span', { class: 'sr-kbd', text: 'C' }));
+  const comment = tb([...label('Commenta', '✎'), el('span', { class: 'sr-kbd', text: 'C' })], 'Modalità Commenta (tasto C)', h.onToggleComment, 'sr-primary');
   const vpButtons = VIEWPORT_PRESETS.map(p => {
-    const b = tb(p.label, `Apri in una finestra ${p.width}×${p.height}`, () => h.onViewport(p.id));
+    const b = tb(label(p.label, p.label[0]!), `Apri in una finestra ${p.label} ${p.width}×${p.height}`, () => h.onViewport(p.id));
     b.dataset.vp = p.id;
     return b;
   });
   const width = el('span', { class: 'sr-width' });
-  const all = tb('Tutte le viewport', 'Mostra anche i pin delle altre viewport', h.onToggleAllViewports);
-  const resolved = tb('Risolte', 'Mostra anche le segnalazioni risolte', h.onToggleResolved);
-  const list = tb('Elenco', 'Segnalazioni di questa pagina', h.onOpenList);
+  const list = tb([], 'Segnalazioni di questa pagina', h.onOpenList);
   const avatars = el('div', { class: 'sr-avatars', attrs: { 'aria-label': 'Chi sta revisionando' } });
+
+  const all = tb(['Tutte le viewport'], 'Tutte le viewport', h.onToggleAllViewports, 'sr-pop-item');
+  const resolved = tb(['Mostra risolte'], 'Mostra risolte', h.onToggleResolved, 'sr-pop-item');
+  const pop = el('div', { class: 'sr sr-pop', attrs: { role: 'group', 'aria-label': 'Filtri' } }, [all, resolved]);
+  pop.hidden = true;
+  const filters = tb([], 'Filtri', () => { pop.hidden = !pop.hidden; filters.setAttribute('aria-expanded', String(!pop.hidden)); });
+  filters.setAttribute('aria-expanded', 'false');
+  filters.removeAttribute('aria-pressed');
+
   const msg = el('div', { class: 'sr sr-msg', attrs: { role: 'status' } });
   msg.hidden = true;
   let msgTimer: ReturnType<typeof setTimeout> | undefined;
@@ -35,22 +42,28 @@ export function createToolbar(shadow: ShadowRoot, projectName: string, h: Toolba
   const bar = el('div', { class: 'sr sr-toolbar', attrs: { role: 'toolbar', 'aria-label': 'Stage Review' } }, [
     el('span', { class: 'sr-name', text: projectName, attrs: { title: projectName } }),
     comment, el('span', { class: 'sr-sep' }), ...vpButtons, width, el('span', { class: 'sr-sep' }),
-    all, resolved, list, avatars,
-    tb('Board', 'Apri la board', h.onOpenBoard),
-    tb('×', 'Chiudi Stage Review', h.onClose),
+    list, filters, avatars,
+    tb(label('Board', '↗'), 'Apri la board', h.onOpenBoard),
+    tb(['×'], 'Chiudi Stage Review', h.onClose),
   ]);
-  shadow.append(bar, msg);
+  shadow.append(bar, pop, msg);
+  let count = 0;
+  list.textContent = 'Elenco (0)';
+  filters.textContent = 'Filtri';
 
   return {
     element: bar,
     setCommenting(on: boolean) { comment.setAttribute('aria-pressed', String(on)); },
     setViewport(cls: ViewportClass, w: number) {
       for (const b of vpButtons) b.setAttribute('aria-pressed', String(b.dataset.vp === cls));
-      width.textContent = `${VIEWPORT_LABEL[cls]} ${w}px`;
+      width.textContent = `${w}px`;
+      width.title = `${VIEWPORT_LABEL[cls]} ${w}px`;
     },
     setToggles(t: { allViewports: boolean; resolved: boolean }) {
       all.setAttribute('aria-pressed', String(t.allViewports));
       resolved.setAttribute('aria-pressed', String(t.resolved));
+      const active = Number(t.allViewports) + Number(t.resolved);
+      filters.textContent = active ? `Filtri (${active})` : 'Filtri';
     },
     setPresence(others: PresenceState[]) {
       avatars.replaceChildren(...others.map(o => el('span', {
@@ -58,7 +71,7 @@ export function createToolbar(shadow: ShadowRoot, projectName: string, h: Toolba
         attrs: { title: `${o.name} · ${o.page_path} · ${VIEWPORT_LABEL[o.viewport_class]}`, style: `background:${o.color}` },
       })));
     },
-    setCount(n: number) { list.textContent = `Elenco (${n})`; },
+    setCount(n: number) { count = n; list.textContent = `Elenco (${count})`; },
     showMessage(text: string | Node, kind: 'info' | 'error' = 'info', sticky = false) {
       msg.replaceChildren(text);
       msg.className = `sr sr-msg${kind === 'error' ? ' sr-error' : ''}`;
@@ -66,7 +79,7 @@ export function createToolbar(shadow: ShadowRoot, projectName: string, h: Toolba
       clearTimeout(msgTimer);
       if (!sticky) msgTimer = setTimeout(() => { msg.hidden = true; }, 5000);
     },
-    destroy() { clearTimeout(msgTimer); bar.remove(); msg.remove(); },
+    destroy() { clearTimeout(msgTimer); bar.remove(); pop.remove(); msg.remove(); },
   };
 }
 export type Toolbar = ReturnType<typeof createToolbar>;

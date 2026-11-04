@@ -25,4 +25,4 @@ Prima: setup completato (LEGGIMI.md), pulsante Revisiona installato da entrambi.
 | R2 | Su una pagina prodotto cambia variante (l'URL cambia senza ricaricare), poi vai a un'altra pagina con un link interno senza ricarica | I pin si aggiornano per la nuova pagina | |
 | R3 | Segnala un elemento dell'header fisso e scorri la pagina | Il pin resta sull'header | |
 | R4 | Scrivi `<img src=x onerror=alert(1)>` come testo di una segnalazione | Appare come testo nel tool, nella board e nel Doc; nessun alert | |
-| R5 | Scrivi una segnalazione, poi da un'altra scheda esci dalla board ("Esci") e torna a salvare | Compare il login; dopo l'accesso la bozza si salva | |
+| R5 | Scrivi una segnalazione senza salvarla; in DevTools → Application → Local Storage dello stage cancella la chiave `stage-review-auth`; poi clicca Salva | Compare il login; dopo l'accesso la bozza si salva | |
