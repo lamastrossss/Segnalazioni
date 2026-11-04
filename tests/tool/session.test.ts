@@ -52,3 +52,32 @@ describe('sessione', () => {
     expect(root.shadow.querySelector('.sr-pin')!.classList.contains('sr-focus')).toBe(true);
   });
 });
+
+describe('sessione: nuova segnalazione', () => {
+  it('clic in modalità Commenta su un elemento già segnalato mostra il doppione', async () => {
+    const existing = makeIssue({ id: 'e1', page_path: '/', number: 4, body: 'Spaziatura',
+      anchor: { selector: 'h2', tag: 'H2', text: 'Titolo', offset: { x: 0, y: 0 }, page: { x: 0, y: 0, docHeight: 0 } } });
+    const { s, root } = start([existing]);
+    await s.ready;
+    s.mode.enable();
+    document.querySelector('h2')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: 3, clientY: 4 }));
+    await flush(); await flush();
+    expect(s.mode.isOn()).toBe(false);
+    const dup = root.shadow.querySelector('.sr-composer .sr-dup');
+    expect(dup?.textContent).toContain('#4');
+    expect(root.shadow.textContent).toContain('Screenshot non disponibile');
+  });
+  it('dopo il salvataggio il pin compare', async () => {
+    const { s, root, api } = start([]);
+    await s.ready;
+    const saved = makeIssue({ id: 'n1', page_path: '/', number: 1 });
+    api.createIssue.mockResolvedValueOnce({ ok: true, value: { issue: saved, failed: [] } });
+    s.mode.enable();
+    document.querySelector('h2')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await flush(); await flush();
+    root.shadow.querySelector('textarea')!.value = 'nuova';
+    root.shadow.querySelector<HTMLButtonElement>('.sr-save')!.click();
+    await flush();
+    expect(root.shadow.querySelectorAll('.sr-pin')).toHaveLength(1);
+  });
+});

@@ -11,13 +11,18 @@ import { createPinLayer } from './pins';
 import { createCommentMode } from './comment-mode';
 import { visiblePins } from './pin-logic';
 import { watchLocation } from './location';
+import { createCapturer } from './capture';
+import { createComposer } from './composer';
+import { createAnchor, resolveAnchor } from './anchor';
+import { findDuplicates } from './pin-logic';
+import { renderAuthForm } from '../shared/auth-ui';
 
 export interface SessionCtx {
   win: Window; root: { host: HTMLElement; shadow: ShadowRoot };
   api: Api; auth: Auth; live: LiveAdapter; me: Profile; project: Project; onClose(): void;
 }
 
-const STATUS_LABEL = { open: 'Aperta', in_progress: 'In lavorazione', resolved: 'Risolta' } as const;
+import { STATUS_LABEL } from '../shared/format';
 
 /** Collega barra, pin, composer e realtime per una pagina dello stage. */
 export function createSession(ctx: SessionCtx) {
@@ -60,13 +65,53 @@ export function createSession(ctx: SessionCtx) {
     box.hidden = false;
   };
 
-  const mode = createCommentMode(win.document, isOwnUi, (target, x, y) => onPick(target, x, y),
-    on => toolbar.setCommenting(on), highlight);
+  let me = ctx.me;
+  const capturer = createCapturer(win);
+  cleanups.push(() => capturer.stop());
+
+  const mode = createCommentMode(win.document, isOwnUi, (target, x, y) => void onPick(target, x, y), on => {
+    toolbar.setCommenting(on);
+    if (on) void capturer.start(); // gesto dell'utente: Chrome chiede il permesso una volta per finestra
+  }, highlight);
   cleanups.push(() => mode.destroy());
 
-  // Estesi dal Task 9 (composer) e dal Task 10 (live)
-  let onPick: (target: Element, x: number, y: number) => void = () => {};
-  let openThread: (issueId: string) => void = () => {};
+  const composer = createComposer(shadow, {
+    api, me: () => me, projectId: project.id, profilesById,
+    reauth: async () => { me = await renderAuthForm(shadow, ctx.auth); profilesById.set(me.id, me); return me; },
+    onSaved: issue => { issues.set(issue.id, issue); render(); toolbar.showMessage(`Segnalazione #${issue.number} salvata.`); },
+    onChanged: id => void refreshIssue(id),
+  });
+  cleanups.push(() => composer.close());
+
+  function openThread(issueId: string) { void composer.openThread(issueId); }
+
+  async function refreshIssue(id: string) {
+    const r = await api.getIssue(id);
+    if (!r.ok) return;
+    const { replies: _r, attachments: _a, ...issue } = r.value;
+    issues.set(id, issue);
+    render();
+  }
+
+  function cleanPageUrl(): string {
+    const u = new URL(win.location.href);
+    if (parseFocusHash(u.hash)) u.hash = '';
+    return u.toString();
+  }
+
+  async function onPick(target: Element, x: number, y: number) {
+    mode.disable();
+    const shot = await capturer.grab({ hide: root.host, pin: { x, y }, color: me.color });
+    const anchor = createAnchor(target, x, y, win);
+    const candidates = [...issues.values()]
+      .filter(i => i.page_path === state.pagePath && !i.deleted_at)
+      .map(issue => ({ issue, resolved: resolveAnchor(issue.anchor, win.document) }));
+    composer.openNew({
+      anchor, pagePath: state.pagePath, pageUrl: cleanPageUrl(),
+      viewportClass: state.viewport, viewportWidth: win.innerWidth, screenshot: shot,
+      duplicates: findDuplicates(target, candidates, { pagePath: state.pagePath, viewportClass: state.viewport }),
+    });
+  }
 
   function pinCtx() {
     return { pagePath: state.pagePath, viewportClass: state.viewport, showAllViewports: state.allViewports, showResolved: state.resolved };
@@ -144,9 +189,7 @@ export function createSession(ctx: SessionCtx) {
   render();
 
   return {
-    toolbar, ready, issues, profilesById, state, render, focusIssue, mode,
-    setPickHandler(fn: typeof onPick) { onPick = fn; },
-    setThreadHandler(fn: typeof openThread) { openThread = fn; },
+    toolbar, ready, issues, profilesById, state, render, focusIssue, mode, composer, refreshIssue,
     destroy() { for (const c of cleanups.splice(0).reverse()) c(); listPanel?.remove(); box.remove(); },
   };
 }
