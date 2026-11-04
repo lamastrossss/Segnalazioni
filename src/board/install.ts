@@ -21,9 +21,9 @@ document.getElementById('app')!.append(
   el('div', { class: 'card' }, [
     el('p', { text: 'Il pulsante Revisiona apre Stage Review sopra qualsiasi stage, senza aggiungere codice al sito. Funziona su Chrome desktop.' }),
     el('ol', { class: 'steps' }, [
-      el('li', {}, ['Mostra la barra dei preferiti di Chrome: ', el('kbd', { text: 'Cmd' }), ' + ', el('kbd', { text: 'Shift' }), ' + ', el('kbd', { text: 'B' }), '.']),
-      el('li', {}, ['Trascina questo pulsante nella barra: ', link]),
-      el('li', {}, ['Apri uno stage e clicca ', el('strong', { text: 'Revisiona' }), '. La prima volta ti chiederà di accedere con l’email dello studio.']),
+      el('li', {}, [el('span', {}, ['Mostra la barra dei preferiti di Chrome: ', el('kbd', { text: 'Cmd' }), ' + ', el('kbd', { text: 'Shift' }), ' + ', el('kbd', { text: 'B' }), '.'])]),
+      el('li', {}, [el('span', {}, ['Trascina questo pulsante nella barra: ', link])]),
+      el('li', {}, [el('span', {}, ['Apri uno stage e clicca ', el('strong', { text: 'Revisiona' }), '. La prima volta ti chiederà di accedere con l’email dello studio.'])]),
     ]),
     el('p', { class: 'muted', text: 'Scorciatoie sul sito: C attiva o disattiva la modalità Commenta, Esc la chiude.' }),
   ]),
