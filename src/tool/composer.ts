@@ -19,6 +19,8 @@ export interface ComposerDeps {
   onChanged: (issueId: string) => void;
   profilesById: Map<string, Profile>;
   prepare?: (f: File) => Promise<PreparedImage>;
+  /** Elementi in più nel thread (la board aggiunge "Apri nel sito"). */
+  threadExtras?: (issue: IssueDetail) => Node[];
 }
 
 const DUP_TEXT = 80;
@@ -234,7 +236,7 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
     const p = el('div', { class: 'sr sr-panel sr-thread', attrs: { 'data-issue': issue.id } }, [
       header(`#${issue.number}`, [status]),
       issue.deleted_at ? el('p', { class: 'sr-error-text', text: 'Segnalazione eliminata.' }) : '',
-      body, el('div', { class: 'sr-row' }, actions), replies,
+      body, el('div', { class: 'sr-row' }, actions), ...(deps.threadExtras?.(issue) ?? []), replies,
       replyText, picker.element, err, send,
     ]);
     mount(p);

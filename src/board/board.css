@@ -14,3 +14,25 @@ header.top h1 { font-size: 18px; margin: 0; flex: 1; }
 .muted { color: var(--muted); font-size: 13px; }
 .error { color: var(--danger); }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.card h2 { font-size: 16px; margin: 0 0 4px; }
+.card .domains { margin: 0 0 12px; word-break: break-all; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.chip { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #EFEFEC; font-size: 12px; white-space: nowrap; }
+.chip.open { background: #FFF1E0; } .chip.in_progress { background: #E6F2F8; } .chip.resolved { background: #E8F5EC; }
+.status-bar { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 20px; }
+.meter { width: 160px; height: 6px; background: #E5E5E5; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 8px; }
+.meter > span { display: block; height: 100%; background: var(--fg); }
+.meter.warn > span { background: var(--danger); }
+.warn-text, .archive.stale, .archive.error { color: var(--danger); font-weight: 600; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.filters select { font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.issues { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.issue { display: grid; grid-template-columns: 72px 1fr; gap: 12px; align-items: start; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px; cursor: pointer; text-align: left; width: 100%; font: inherit; color: inherit; }
+.issue:hover { border-color: #BDBDBD; }
+.issue .thumb { width: 72px; height: 54px; border-radius: 8px; background: #EFEFEC; object-fit: cover; display: block; }
+.issue .title { margin: 0; overflow-wrap: anywhere; }
+.issue .num { font-weight: 700; margin-right: 6px; }
+.empty { text-align: center; padding: 48px 16px; color: var(--muted); }
+.auth-wrap .sr-panel { position: static; margin: 40px auto; width: min(400px, 100%); max-height: none; box-shadow: none; border: 1px solid var(--line); }
+@media (max-width: 560px) { .issue { grid-template-columns: 56px 1fr; } .issue .thumb { width: 56px; height: 42px; } }
