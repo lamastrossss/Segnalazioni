@@ -13,11 +13,19 @@ import { createSession, type Session } from './session';
 
 export interface ToolInstance { destroy(): void }
 export interface BootDeps { api: Api; auth: Auth; live: LiveAdapter }
-type ToolWindow = Window & { __stageReview?: ToolInstance };
+type ToolWindow = Window & { __stageReview?: ToolInstance; __stageReviewLoading?: boolean };
 
-export async function boot(win: Window, deps: Partial<BootDeps> = {}): Promise<ToolInstance | null> {
+/**
+ * Avvia il tool. Se è già attivo: con un avvio manuale lo chiude (comportamento "toggle"),
+ * con un avvio automatico (estensione "sempre attivo") non fa niente.
+ */
+export async function boot(win: Window, deps: Partial<BootDeps> = {}, opts: { auto?: boolean } = {}): Promise<ToolInstance | null> {
   const w = win as ToolWindow;
-  if (w.__stageReview) { w.__stageReview.destroy(); return null; }
+  w.__stageReviewLoading = false;
+  if (w.__stageReview) {
+    if (!opts.auto) w.__stageReview.destroy();
+    return null;
+  }
 
   const root = mountRoot(win.document);
   let session: Session | null = null;

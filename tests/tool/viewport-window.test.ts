@@ -38,11 +38,37 @@ describe('finestre viewport dopo una navigazione', () => {
     expect(popup.document.querySelectorAll('script')).toHaveLength(1);
     vi.advanceTimersByTime(1200);
     expect(popup.document.querySelectorAll('script')).toHaveLength(1); // non duplica sulla stessa pagina
-    popup.document = mkDoc(); popup.location.href = 'https://x/b'; // l'utente ha cliccato un link nella finestra
+    // l'utente ha cliccato un link nella finestra: nuovo documento e variabili globali azzerate, come in Chrome
+    popup.document = mkDoc(); popup.location.href = 'https://x/b'; delete popup.__stageReviewLoading;
     vi.advanceTimersByTime(600);
     expect(popup.document.querySelectorAll('script')).toHaveLength(1);
     popup.closed = true;
     vi.advanceTimersByTime(600);
+    vi.useRealTimers();
+  });
+});
+
+describe('finestre viewport e caricamento in corso', () => {
+  it('non inietta se il tool sta già caricando (es. estensione "sempre attivo")', () => {
+    vi.useFakeTimers();
+    const doc = document.implementation.createHTMLDocument('p');
+    Object.defineProperty(doc, 'readyState', { value: 'complete' });
+    const popup: any = { document: doc, innerWidth: 375, closed: false, resizeBy: vi.fn(), location: { href: 'https://x/a' }, __stageReviewLoading: true };
+    openViewportWindow({ open: () => popup, location: { href: 'https://x/a' } } as unknown as Window, 'mobile', 'https://u/tool.js');
+    vi.advanceTimersByTime(600);
+    expect(doc.querySelectorAll('script')).toHaveLength(0);
+    popup.closed = true; vi.advanceTimersByTime(600);
+    vi.useRealTimers();
+  });
+  it('segna il caricamento quando inietta', () => {
+    vi.useFakeTimers();
+    const doc = document.implementation.createHTMLDocument('p');
+    Object.defineProperty(doc, 'readyState', { value: 'complete' });
+    const popup: any = { document: doc, innerWidth: 375, closed: false, resizeBy: vi.fn(), location: { href: 'https://x/a' } };
+    openViewportWindow({ open: () => popup, location: { href: 'https://x/a' } } as unknown as Window, 'mobile', 'https://u/tool.js');
+    vi.advanceTimersByTime(600);
+    expect(popup.__stageReviewLoading).toBe(true);
+    popup.closed = true; vi.advanceTimersByTime(600);
     vi.useRealTimers();
   });
 });

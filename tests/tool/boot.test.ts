@@ -37,4 +37,14 @@ describe('boot', () => {
     expect(shadow.textContent).toContain('Crea nuovo sito');
     expect(shadow.textContent).toContain('Collega a un sito esistente');
   });
+  it('l\'avvio automatico non chiude un tool già aperto (Review Focus 1)', async () => {
+    await boot(window, deps());
+    expect(await boot(window, deps(), { auto: true })).toBeNull();
+    expect(document.querySelectorAll('#stage-review-root')).toHaveLength(1);
+  });
+  it('azzera il flag di caricamento all\'avvio', async () => {
+    (window as any).__stageReviewLoading = true;
+    await boot(window, deps());
+    expect((window as any).__stageReviewLoading).toBe(false);
+  });
 });

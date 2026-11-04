@@ -37,7 +37,9 @@ export function openViewportWindow(win: Window, presetId: ViewportClass, toolSrc
       const doc = popup.document;
       if (injected.has(doc) || doc.readyState !== 'complete' || popup.location.href === 'about:blank') return;
       injected.add(doc);
-      if ((popup as Window & { __stageReview?: unknown }).__stageReview) return;
+      const pw = popup as Window & { __stageReview?: unknown; __stageReviewLoading?: boolean };
+      if (pw.__stageReview || pw.__stageReviewLoading) return;
+      pw.__stageReviewLoading = true;
       const s = doc.createElement('script');
       s.src = `${toolSrc}?v=${Date.now()}`;
       doc.documentElement.append(s);
