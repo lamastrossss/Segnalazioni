@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "build": "vite build && vite build -c vite.tool.config.ts",
+    "build": "vite build && vite build -c vite.tool.config.ts && node scripts/build-extension.mjs",
     "dev": "vite"
   },
   "dependencies": {
