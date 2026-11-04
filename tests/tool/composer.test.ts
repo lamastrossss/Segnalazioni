@@ -9,11 +9,11 @@ let host: HTMLElement, shadow: ShadowRoot;
 beforeEach(() => { host = document.createElement('div'); document.body.append(host); shadow = host.attachShadow({ mode: 'open' }); });
 afterEach(() => host.remove());
 
-const fakePrepare = async (f: File): Promise<PreparedImage> => ({ blob: f, width: 1, height: 1, bytes: f.size, ext: 'webp', name: f.name });
+const fakePrepare = async (f: File): Promise<PreparedImage> => ({ blob: f, width: 1, height: 1, bytes: f.size, ext: 'jpg', name: f.name });
 const ctx = (over: Partial<NewIssueContext> = {}): NewIssueContext => ({
   anchor: { selector: 'h2', tag: 'H2', text: 'Titolo', offset: { x: 0, y: 0 }, page: { x: 0, y: 0, docHeight: 0 } },
   pagePath: '/p', pageUrl: 'https://x/p', viewportClass: 'mobile', viewportWidth: 375,
-  screenshot: { blob: new Blob(['s']), width: 1, height: 1, bytes: 1, ext: 'webp', name: 'shot' },
+  screenshot: { blob: new Blob(['s']), width: 1, height: 1, bytes: 1, ext: 'jpg', name: 'shot' },
   duplicates: [], ...over,
 });
 
@@ -96,7 +96,7 @@ describe('composer nuova segnalazione', () => {
   });
   it('allegato fallito resta con Riprova senza ricreare la segnalazione', async () => {
     const { api, composer } = setup();
-    const img: PreparedImage = { blob: new Blob(['a']), width: 1, height: 1, bytes: 1, ext: 'webp', name: 'a.webp' };
+    const img: PreparedImage = { blob: new Blob(['a']), width: 1, height: 1, bytes: 1, ext: 'jpg', name: 'a.jpg' };
     api.createIssue.mockResolvedValueOnce({ ok: true, value: { issue: savedIssue, failed: [img] } });
     api.uploadAttachment.mockResolvedValueOnce({ ok: true, value: {} as never });
     composer.openNew(ctx());

@@ -22,7 +22,7 @@ begin
   insert into public.issues (project_id, page_path, page_url, viewport_class, viewport_width, anchor, body)
     values (p, '/', 'https://rls-test.example/', 'desktop', 1440, '{}', 'due') returning number into n2;
   if n1 <> 1 or n2 <> 2 then raise exception 'FAIL: numerazione attesa 1,2 ottenuta %,%', n1, n2; end if;
-  insert into storage.objects (bucket_id, name) values ('media', p || '/' || i1 || '/screenshot.webp');
+  insert into storage.objects (bucket_id, name) values ('media', p || '/' || i1 || '/screenshot.jpg');
   perform set_config('sr.project', p::text, true);
   perform set_config('sr.issue', i1::text, true);
 end $$;
@@ -40,7 +40,7 @@ begin
     raise exception 'FAIL: esterno crea progetti';
   exception when insufficient_privilege then null; end;
   begin
-    insert into storage.objects (bucket_id, name) values ('media', 'intruso.webp');
+    insert into storage.objects (bucket_id, name) values ('media', 'intruso.jpg');
     raise exception 'FAIL: esterno carica file';
   exception when insufficient_privilege then null; end;
 end $$;

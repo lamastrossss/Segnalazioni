@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Anchor, ArchiveStatus, Attachment, Issue, IssueDetail, IssueStatus, Profile, Project, Reply, ViewportClass } from './types';
-import type { PreparedImage } from './media';
+import { mimeOf, type PreparedImage } from './media';
 import { classifyError, fail, ok, type Result } from './errors';
 import { probeSupabase } from './supabase';
 
@@ -54,7 +54,7 @@ export function createApi(client: SupabaseClient) {
   async function uploadAttachment(issue: Pick<Issue, 'id' | 'project_id'>, img: PreparedImage, replyId: string | null): Promise<Result<Attachment>> {
     const path = mediaPath(issue, `att-${crypto.randomUUID()}.${img.ext}`);
     try {
-      const up = await storage().upload(path, img.blob, { contentType: `image/${img.ext}`, upsert: false });
+      const up = await storage().upload(path, img.blob, { contentType: mimeOf(img.ext), upsert: false });
       if (up.error) return asError(up.error);
     } catch (e) { return asError(e); }
     return run(client.from('attachments').insert({
@@ -133,9 +133,9 @@ export function createApi(client: SupabaseClient) {
       if (!ins.ok) return ins;
       let issue = ins.value;
       if (screenshot) {
-        const path = mediaPath(issue, 'screenshot.webp');
+        const path = mediaPath(issue, 'screenshot.jpg');
         try {
-          const up = await storage().upload(path, screenshot.blob, { contentType: 'image/webp', upsert: false });
+          const up = await storage().upload(path, screenshot.blob, { contentType: 'image/jpeg', upsert: false });
           if (!up.error) {
             const u = await updateOne('issues', issue.id, { screenshot_path: path, screenshot_bytes: screenshot.bytes });
             if (u.ok) issue = { ...issue, screenshot_path: path, screenshot_bytes: screenshot.bytes };

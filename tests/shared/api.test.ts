@@ -3,7 +3,7 @@ import { createApi, type NewIssue } from '../../src/shared/api';
 import type { PreparedImage } from '../../src/shared/media';
 import { createFakeSupabase } from '../helpers/fake-supabase';
 
-const img = (name: string): PreparedImage => ({ blob: new Blob(['x']), width: 10, height: 10, bytes: 1, ext: 'webp', name });
+const img = (name: string): PreparedImage => ({ blob: new Blob(['x']), width: 10, height: 10, bytes: 1, ext: 'jpg', name });
 const input: NewIssue = {
   project_id: 'p1', page_path: '/p', page_url: 'https://x/p', viewport_class: 'mobile', viewport_width: 375,
   browser: 'Chrome', anchor: { selector: 'h2', tag: 'H2', text: '', offset: { x: 0, y: 0 }, page: { x: 0, y: 0, docHeight: 0 } }, body: 'ciao',
@@ -22,25 +22,25 @@ function setup() {
 describe('createIssue', () => {
   it('carica screenshot e allegati e riporta quelli falliti', async () => {
     const { fake, api } = setup();
-    const imgB = img('b.webp');
+    const imgB = img('b.jpg');
     let n = 0;
     fake.failUploadWhen(p => p.includes('/att-') && ++n === 2);
-    const r = await api.createIssue(input, img('shot'), [img('a.webp'), imgB]);
+    const r = await api.createIssue(input, img('shot'), [img('a.jpg'), imgB]);
     expect(r.ok && r.value.failed).toEqual([imgB]);
-    expect(fake.uploads.map(u => u.path)).toEqual(['p1/i1/screenshot.webp', expect.stringMatching(/^p1\/i1\/att-.+\.webp$/)]);
+    expect(fake.uploads.map(u => u.path)).toEqual(['p1/i1/screenshot.jpg', expect.stringMatching(/^p1\/i1\/att-.+\.jpg$/)]);
     const upd = fake.calls.find(c => c.table === 'issues' && c.op === 'update')!;
-    expect(upd.payload).toEqual({ screenshot_path: 'p1/i1/screenshot.webp', screenshot_bytes: 1 });
+    expect(upd.payload).toEqual({ screenshot_path: 'p1/i1/screenshot.jpg', screenshot_bytes: 1 });
   });
   it('insert fallito → nessun upload e errore', async () => {
     const { fake, api } = setup();
     fake.on('issues:insert', () => ({ data: null, error: { code: '42501', message: 'rls' }, status: 403 }));
-    const r = await api.createIssue(input, img('shot'), [img('a.webp')]);
+    const r = await api.createIssue(input, img('shot'), [img('a.jpg')]);
     expect(r.ok).toBe(false);
     expect(fake.uploads).toHaveLength(0);
   });
   it('screenshot fallito → segnalazione salvata senza screenshot', async () => {
     const { fake, api } = setup();
-    fake.failUploadWhen(p => p.endsWith('screenshot.webp'));
+    fake.failUploadWhen(p => p.endsWith('screenshot.jpg'));
     const r = await api.createIssue(input, img('shot'), []);
     expect(r.ok && r.value.issue.screenshot_path).toBeNull();
   });

@@ -1,4 +1,4 @@
-export interface PreparedImage { blob: Blob; width: number; height: number; bytes: number; ext: 'webp' | 'gif'; name: string }
+export interface PreparedImage { blob: Blob; width: number; height: number; bytes: number; ext: 'jpg' | 'gif'; name: string }
 export type RejectionReason = 'tipo' | 'troppo-grande' | 'troppi';
 export type AttachmentRejection = { name: string; reason: RejectionReason };
 
@@ -51,16 +51,24 @@ export async function prepareAttachment(file: File): Promise<PreparedImage> {
   }
   const bmp = await createImageBitmap(file);
   const canvas = new OffscreenCanvas(bmp.width, bmp.height);
-  canvas.getContext('2d')!.drawImage(bmp, 0, 0);
+  const g = canvas.getContext('2d')!;
+  g.fillStyle = '#ffffff'; // JPEG non ha trasparenza: sfondo bianco per i PNG trasparenti
+  g.fillRect(0, 0, bmp.width, bmp.height);
+  g.drawImage(bmp, 0, 0);
   bmp.close();
   const img = await encodeCanvas(canvas, { maxSide: ATTACHMENT_MAX_SIDE, quality: 0.8, targetBytes: ATTACHMENT_TARGET_BYTES });
-  return { ...img, name: baseName(file.name) + '.webp' };
+  return { ...img, name: baseName(file.name) + '.jpg' };
 }
 
-async function toWebp(canvas: HTMLCanvasElement | OffscreenCanvas, quality: number): Promise<Blob> {
-  if ('convertToBlob' in canvas) return canvas.convertToBlob({ type: 'image/webp', quality });
+/** MIME di un'immagine preparata. JPEG perché Google Docs (archivio) non accetta WebP. */
+export function mimeOf(ext: PreparedImage['ext']): string {
+  return ext === 'gif' ? 'image/gif' : 'image/jpeg';
+}
+
+async function toJpeg(canvas: HTMLCanvasElement | OffscreenCanvas, quality: number): Promise<Blob> {
+  if ('convertToBlob' in canvas) return canvas.convertToBlob({ type: 'image/jpeg', quality });
   return new Promise((resolve, reject) =>
-    canvas.toBlob(b => (b ? resolve(b) : reject(new Error('codifica non riuscita'))), 'image/webp', quality));
+    canvas.toBlob(b => (b ? resolve(b) : reject(new Error('codifica non riuscita'))), 'image/jpeg', quality));
 }
 
 export async function encodeCanvas(
@@ -76,12 +84,12 @@ export async function encodeCanvas(
     ctx.drawImage(canvas, 0, 0, width, height);
     source = scaled;
   }
-  let blob = await toWebp(source, opts.quality);
+  let blob = await toJpeg(source, opts.quality);
   if (opts.targetBytes) {
     for (const q of [0.7, 0.6, 0.5]) {
       if (blob.size <= opts.targetBytes || q >= opts.quality) break;
-      blob = await toWebp(source, q);
+      blob = await toJpeg(source, q);
     }
   }
-  return { blob, width, height, bytes: blob.size, ext: 'webp', name: 'immagine.webp' };
+  return { blob, width, height, bytes: blob.size, ext: 'jpg', name: 'immagine.jpg' };
 }

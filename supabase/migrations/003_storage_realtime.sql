@@ -1,6 +1,6 @@
 -- Stage Review — 003: bucket privato per immagini e realtime
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('media', 'media', false, 3145728, array['image/webp', 'image/gif'])
+values ('media', 'media', false, 3145728, array['image/jpeg', 'image/gif'])
 on conflict (id) do nothing;
 
 -- Lettura e caricamento solo per lo studio; nessuna modifica né cancellazione
