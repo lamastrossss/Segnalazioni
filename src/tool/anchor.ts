@@ -69,11 +69,18 @@ export function resolveAnchor(anchor: Anchor, doc: Document): ResolvedAnchor {
   return { element: null, moved: true };
 }
 
+/** Elemento trovato ma non visualizzato (menu chiuso, drawer, markup solo mobile/desktop). */
+export function isHidden(resolved: ResolvedAnchor): boolean {
+  if (!resolved.element) return false;
+  const r = resolved.element.getBoundingClientRect();
+  return r.width === 0 && r.height === 0;
+}
+
 /** Punto del pin in coordinate della viewport (client). */
 export function anchorPoint(anchor: Anchor, resolved: ResolvedAnchor, win: Window): { x: number; y: number } {
   if (resolved.element) {
     const r = resolved.element.getBoundingClientRect();
-    return { x: r.left + anchor.offset.x * r.width, y: r.top + anchor.offset.y * r.height };
+    if (r.width > 0 || r.height > 0) return { x: r.left + anchor.offset.x * r.width, y: r.top + anchor.offset.y * r.height };
   }
   const h = win.document.documentElement.scrollHeight;
   const k = anchor.page.docHeight > 0 && h > 0 ? h / anchor.page.docHeight : 1;

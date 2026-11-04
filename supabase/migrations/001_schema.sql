@@ -86,10 +86,16 @@ create table public.archive_status (
 );
 insert into public.archive_status (id) values (1);
 
--- Accesso riservato allo studio
+-- Accesso riservato allo studio: email @thewavestudio.it CONFERMATA (verificata su auth.users,
+-- così resta sicuro anche se "Confirm email" venisse disattivato nel pannello).
 create function public.is_studio() returns boolean
-language sql stable as $$
-  select lower(coalesce(auth.jwt() ->> 'email', '')) like '%@thewavestudio.it'
+language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from auth.users u
+     where u.id = auth.uid()
+       and u.email_confirmed_at is not null
+       and lower(u.email) like '%@thewavestudio.it'
+  )
 $$;
 
 -- Profilo creato alla registrazione, con un colore dalla palette

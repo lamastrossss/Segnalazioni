@@ -3,7 +3,8 @@
  * Proprietà dello script richieste: SUPABASE_URL, SERVICE_ROLE_KEY, FOLDER_ID. */
 
 var SR_TZ = 'Europe/Rome';
-var SR_MAX_RUN_MS = 5 * 60 * 1000;
+var SR_MAX_RUN_MS = 4 * 60 * 1000; // Apps Script interrompe a 6 minuti
+var SR_SETTLE_MS = 30 * 1000;      // ignora modifiche più recenti: transazioni forse non ancora visibili
 var SR_BATCH = 50;
 var SR_IMAGE_WIDTH = 480;
 var SR_START_WATERMARK = '1970-01-01T00:00:00+00:00|00000000-0000-0000-0000-000000000000';
@@ -18,29 +19,37 @@ function installTrigger() {
 
 /** Entry point del trigger. */
 function syncArchive() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return; // un altro giro è in corso
+  try { srRun_(); } finally { lock.releaseLock(); }
+}
+
+function srRun_() {
   var started = Date.now();
   var props = PropertiesService.getScriptProperties();
   var cfg = srConfig_(props);
   var error = null;
-  var docs = {};
+  var budget = function () { return Date.now() - started < SR_MAX_RUN_MS; };
   try {
     var profiles = srIndex_(srRest_(cfg, 'get', '/rest/v1/profiles?select=id,name'));
     var projects = srIndex_(srRest_(cfg, 'get', '/rest/v1/projects?select=id,name,archive_doc_url'));
+    var settled = encodeURIComponent(new Date(Date.now() - SR_SETTLE_MS).toISOString());
     var more = true;
-    while (more && Date.now() - started < SR_MAX_RUN_MS) {
+    while (more && budget()) {
       var wm = (props.getProperty('WATERMARK') || SR_START_WATERMARK).split('|');
       var t = encodeURIComponent(wm[0]);
       var rows = srRest_(cfg, 'get', '/rest/v1/issues?select=*,replies(*,attachments(*)),attachments(*),plus_ones(user_id)'
         + '&or=(updated_at.gt.' + t + ',and(updated_at.eq.' + t + ',id.gt.' + wm[1] + '))'
+        + '&updated_at=lt.' + settled
         + '&order=updated_at.asc,id.asc&limit=' + SR_BATCH);
       for (var i = 0; i < rows.length; i++) {
-        if (Date.now() - started > SR_MAX_RUN_MS) { more = false; break; }
         var issue = rows[i];
         if (!profiles[issue.author_id] || (issue.deleted_by && !profiles[issue.deleted_by])) {
           profiles = srIndex_(srRest_(cfg, 'get', '/rest/v1/profiles?select=id,name'));
         }
         if (!projects[issue.project_id]) projects = srIndex_(srRest_(cfg, 'get', '/rest/v1/projects?select=id,name,archive_doc_url'));
-        srWriteIssue_(cfg, props, docs, projects[issue.project_id], issue, profiles);
+        // false = tempo finito prima di toccare il Doc: la segnalazione resta per il giro dopo
+        if (!srWriteIssue_(cfg, props, projects[issue.project_id], issue, profiles, budget)) { more = false; break; }
         props.setProperty('WATERMARK', issue.updated_at + '|' + issue.id);
       }
       if (rows.length < SR_BATCH) more = false;
@@ -48,7 +57,6 @@ function syncArchive() {
   } catch (e) {
     error = String((e && e.message) || e);
   }
-  Object.keys(docs).forEach(function (k) { try { docs[k].saveAndClose(); } catch (e) { error = error || String(e); } });
 
   var now = new Date().toISOString();
   var status = { id: 1, last_run_at: now, last_error: error };
@@ -104,8 +112,7 @@ function srIndex_(rows) {
 
 // ---- Google Docs ----
 
-function srDocFor_(cfg, props, docs, project) {
-  if (docs[project.id]) return docs[project.id];
+function srDocFor_(cfg, props, project) {
   var id = props.getProperty('doc:' + project.id);
   var doc = null;
   if (id) { try { doc = DocumentApp.openById(id); } catch (e) { doc = null; } }
@@ -118,7 +125,6 @@ function srDocFor_(cfg, props, docs, project) {
     props.setProperty('doc:' + project.id, doc.getId());
     srRest_(cfg, 'patch', '/rest/v1/projects?id=eq.' + project.id, { archive_doc_url: doc.getUrl() });
   }
-  docs[project.id] = doc;
   return doc;
 }
 
@@ -154,8 +160,7 @@ function srWriter_(body, index) {
   return {
     written: written,
     para: para,
-    image: function (cfg, path) {
-      var blob = path ? srFetchImage_(cfg, path) : null;
+    image: function (blob) {
       if (!blob) return para('[immagine non disponibile]');
       var p = para('');
       try {
@@ -181,26 +186,48 @@ function srSetMeta_(p, issue, profiles) {
   if (start >= 0) p.editAsText().setLinkUrl(start, start + issue.page_url.length - 1, issue.page_url);
 }
 
-function srWriteReply_(cfg, w, doc, issue, reply, profiles) {
+function srWriteReply_(blobs, w, doc, issue, reply, profiles) {
   var header = w.para('↳ ' + formatReplyHeader(reply, profiles, SR_TZ));
   header.editAsText().setBold(true);
   srSetNamed_(doc, 'sr-' + issue.id + '-r-' + reply.id, [header]);
   w.para(reply.body);
   (reply.attachments || []).filter(function (a) { return !a.deleted_at; }).sort(srByCreated)
-    .forEach(function (a) { w.image(cfg, a.path); });
+    .forEach(function (a) { w.image(blobs[a.path]); });
 }
 
-function srWriteIssue_(cfg, props, docs, project, issue, profiles) {
-  if (!project) return;
-  var doc = srDocFor_(cfg, props, docs, project);
-  var body = doc.getBody();
+/** Percorsi delle immagini che il piano scriverà (screenshot, allegati, allegati delle risposte nuove). */
+function srPlannedPaths_(issue, plan, byId) {
+  var paths = plan.newImageIds.map(function (id) { return srImagePath_(issue, id); });
+  plan.newReplyIds.forEach(function (rid) {
+    (byId[rid].attachments || []).filter(function (a) { return !a.deleted_at; }).forEach(function (a) { paths.push(a.path); });
+  });
+  return paths.filter(function (p) { return p; });
+}
+
+/**
+ * Scrive (o aggiorna) il blocco di una segnalazione. Le immagini vengono scaricate PRIMA di
+ * toccare il Doc; il Doc viene salvato prima che il chiamante faccia avanzare il segnaposto.
+ * Restituisce false se il tempo è finito prima di iniziare a scrivere.
+ */
+function srWriteIssue_(cfg, props, project, issue, profiles, budget) {
+  if (!project) return true;
   var key = 'blk:' + issue.id;
   var known = JSON.parse(props.getProperty(key) || 'null');
+  var doc = srDocFor_(cfg, props, project);
   if (known && !srNamed_(doc, 'sr-' + issue.id + '-end')) known = null; // blocco cancellato a mano: si riscrive
   var plan = planBlockUpdate(issue, known);
   var replies = (issue.replies || []).slice().sort(srByCreated);
   var byId = {};
   replies.forEach(function (r) { byId[r.id] = r; });
+
+  var blobs = {};
+  var paths = srPlannedPaths_(issue, plan, byId);
+  for (var i = 0; i < paths.length; i++) {
+    if (!budget()) return false;
+    blobs[paths[i]] = srFetchImage_(cfg, paths[i]);
+  }
+  if (!budget()) return false;
+  var body = doc.getBody();
 
   if (plan.create) {
     var w = srWriter_(body, null);
@@ -209,8 +236,8 @@ function srWriteIssue_(cfg, props, docs, project, issue, profiles) {
     srSetMeta_(meta, issue, profiles);
     srSetNamed_(doc, 'sr-' + issue.id + '-meta', [meta]);
     w.para(issue.body);
-    plan.newImageIds.forEach(function (id) { w.image(cfg, srImagePath_(issue, id)); });
-    plan.newReplyIds.forEach(function (rid) { srWriteReply_(cfg, w, doc, issue, byId[rid], profiles); });
+    plan.newImageIds.forEach(function (id) { w.image(blobs[srImagePath_(issue, id)]); });
+    plan.newReplyIds.forEach(function (rid) { srWriteReply_(blobs, w, doc, issue, byId[rid], profiles); });
     var end = w.para('');
     end.appendHorizontalRule();
     srSetNamed_(doc, 'sr-' + issue.id + '-end', [end]);
@@ -226,12 +253,14 @@ function srWriteIssue_(cfg, props, docs, project, issue, profiles) {
       var endEl = srNamedEl_(doc, 'sr-' + issue.id + '-end');
       var first = srNamedEl_(doc, 'sr-' + issue.id);
       var w2 = srWriter_(body, body.getChildIndex(endEl));
-      plan.newImageIds.forEach(function (id) { w2.image(cfg, srImagePath_(issue, id)); });
-      plan.newReplyIds.forEach(function (rid) { srWriteReply_(cfg, w2, doc, issue, byId[rid], profiles); });
+      plan.newImageIds.forEach(function (id) { w2.image(blobs[srImagePath_(issue, id)]); });
+      plan.newReplyIds.forEach(function (rid) { srWriteReply_(blobs, w2, doc, issue, byId[rid], profiles); });
       var from = body.getChildIndex(first), to = body.getChildIndex(endEl), all = [];
       for (var k = from; k <= to; k++) all.push(body.getChild(k));
       srSetNamed_(doc, 'sr-' + issue.id, all);
     }
   }
+  doc.saveAndClose();
   props.setProperty(key, JSON.stringify(nextKnown(issue)));
+  return true;
 }

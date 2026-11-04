@@ -4,10 +4,11 @@
 -- Tutti i dati di prova vengono annullati (rollback).
 begin;
 
-insert into auth.users (id, email, raw_user_meta_data) values
-  ('00000000-0000-4000-8000-00000000000a', 'a@thewavestudio.it', '{"name":"Test A"}'),
-  ('00000000-0000-4000-8000-00000000000b', 'b@thewavestudio.it', '{"name":"Test B"}'),
-  ('00000000-0000-4000-8000-0000000000ee', 'x@gmail.com',        '{"name":"Esterno"}');
+insert into auth.users (id, email, raw_user_meta_data, email_confirmed_at) values
+  ('00000000-0000-4000-8000-00000000000a', 'a@thewavestudio.it', '{"name":"Test A"}', now()),
+  ('00000000-0000-4000-8000-00000000000b', 'b@thewavestudio.it', '{"name":"Test B"}', now()),
+  ('00000000-0000-4000-8000-0000000000cc', 'c@thewavestudio.it', '{"name":"Non confermato"}', null),
+  ('00000000-0000-4000-8000-0000000000ee', 'x@gmail.com',        '{"name":"Esterno"}', now());
 
 -- Studio A: crea progetto, dominio, due segnalazioni e un file
 set local role authenticated;
@@ -42,6 +43,17 @@ begin
   begin
     insert into storage.objects (bucket_id, name) values ('media', 'intruso.jpg');
     raise exception 'FAIL: esterno carica file';
+  exception when insufficient_privilege then null; end;
+end $$;
+
+-- Email dello studio non confermata: non vede e non scrive niente
+set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000cc","email":"c@thewavestudio.it"}';
+do $$
+begin
+  if (select count(*) from public.issues) <> 0 then raise exception 'FAIL: email non confermata vede segnalazioni'; end if;
+  begin
+    insert into public.projects (name) values ('Non confermato');
+    raise exception 'FAIL: email non confermata crea progetti';
   exception when insufficient_privilege then null; end;
 end $$;
 

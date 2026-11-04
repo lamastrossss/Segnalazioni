@@ -60,11 +60,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .sr-pins { position: fixed; inset: 0; pointer-events: none; }
 .sr-pin { position: fixed; left: 0; top: 0; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%; border: 2px solid #fff; color: #fff;
   display: grid; place-items: center; font-size: 11px; font-weight: 700; pointer-events: auto; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
-.sr-pin.sr-moved { border-style: dashed; border-color: #111; }
+.sr-pin.sr-moved, .sr-pin.sr-hidden-el { border-style: dashed; border-color: #111; }
 .sr-pin.sr-muted-pin { background: #9A9A9A !important; opacity: .7; }
 .sr-pin.sr-resolved { opacity: .55; }
 .sr-pin.sr-focus { animation: sr-pulse 0.5s ease-in-out 4 alternate; }
-@keyframes sr-pulse { to { transform: scale(1.5); } }
+@keyframes sr-pulse { to { scale: 1.5; } }
 @media (prefers-reduced-motion: reduce) { .sr-pin.sr-focus { animation: none; outline: 3px solid #2E86AB; } }
 .sr-highlight { position: fixed; pointer-events: none; border: 2px solid #2E86AB; background: rgba(46,134,171,.08); border-radius: 2px; }
 

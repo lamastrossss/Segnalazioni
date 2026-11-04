@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { buildSelector, createAnchor, resolveAnchor, anchorPoint } from '../../src/tool/anchor';
+import { buildSelector, createAnchor, resolveAnchor, anchorPoint, isHidden } from '../../src/tool/anchor';
 
 function mockRect(el: Element, r: { left: number; top: number; width: number; height: number }) {
   vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
@@ -89,5 +89,16 @@ describe('anchorPoint', () => {
     const a = { selector: 'x', tag: 'H2', text: '', offset: { x: 0, y: 0 }, page: { x: 50, y: 1000, docHeight: 2000 } };
     Object.defineProperty(document.documentElement, 'scrollHeight', { value: 4000, configurable: true });
     expect(anchorPoint(a, { element: null, moved: true }, window)).toEqual({ x: 50, y: 2000 });
+  });
+});
+
+describe('anchorPoint su elementi nascosti', () => {
+  it('un elemento trovato ma senza dimensioni usa la posizione salvata', () => {
+    document.body.innerHTML = '<details><summary>Menu</summary><a id="voce">Voce</a></details>';
+    const a = { selector: '#voce', tag: 'A', text: 'Voce', offset: { x: 0.5, y: 0.5 }, page: { x: 120, y: 300, docHeight: 0 } };
+    const el = document.getElementById('voce')!;
+    mockRect(el, { left: 0, top: 0, width: 0, height: 0 });
+    expect(anchorPoint(a, { element: el, moved: false }, window)).toEqual({ x: 120, y: 300 });
+    expect(isHidden({ element: el, moved: false })).toBe(true);
   });
 });

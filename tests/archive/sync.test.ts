@@ -18,13 +18,14 @@ class P {
   editAsText() { return { setBold: () => { this.bold = true; }, setLinkUrl: (_s: number, _e: number, u: string) => { this.link = u; } }; }
   asParagraph() { return this; }
 }
+let saveHook: (id: string) => void = () => {};
 class Doc {
   children: P[] = [new P('')];
   named = new Map<string, P[][]>();
   constructor(public id: string, public name: string) {}
   getId() { return this.id; }
   getUrl() { return `https://docs.google.com/document/d/${this.id}/edit`; }
-  saveAndClose() {}
+  saveAndClose() { saveHook(this.id); }
   getBody() {
     const c = this.children;
     return {
@@ -46,7 +47,8 @@ class Doc {
 }
 
 interface Row { [k: string]: any }
-function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: { failIssues?: boolean; badImage?: string } = {}) {
+function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: { failIssues?: boolean; badImage?: string; locked?: boolean } = {}) {
+  const events: string[] = [];
   const props = new Map<string, string>([['SUPABASE_URL', 'https://sb.test'], ['SERVICE_ROLE_KEY', 'service'], ['FOLDER_ID', 'folder']]);
   const docs = new Map<string, Doc>();
   const log: { method: string; path: string; body?: any }[] = [];
@@ -69,10 +71,12 @@ function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: 
     if (u.pathname === '/rest/v1/archive_status') { (db as any).status = { ...((db as any).status ?? {}), ...body }; return json(null); }
     if (u.pathname === '/rest/v1/issues') {
       if (opts.failIssues) return json({ message: 'boom' }, 500);
+      const lt = u.searchParams.get('updated_at');
       const m = /updated_at\.gt\.([^,]+),and\(updated_at\.eq\.([^,]+),id\.gt\.([^)]+)\)/.exec(u.searchParams.get('or')!)!;
       const [t, id] = [m[1], m[3]];
       const rows = db.issues
         .filter(i => i.updated_at > t || (i.updated_at === t && i.id > id))
+        .filter(i => !lt || new Date(i.updated_at) < new Date(lt.replace('lt.', '')))
         .sort((a, b) => a.updated_at.localeCompare(b.updated_at) || a.id.localeCompare(b.id))
         .slice(0, Number(u.searchParams.get('limit')));
       return json(rows);
@@ -82,7 +86,7 @@ function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: 
   const ctx: Record<string, unknown> = {
     PropertiesService: { getScriptProperties: () => ({
       getProperty: (k: string) => props.get(k) ?? null,
-      setProperty: (k: string, v: string) => { props.set(k, v); },
+      setProperty: (k: string, v: string) => { if (k === 'WATERMARK') events.push('wm'); props.set(k, v); },
       getProperties: () => Object.fromEntries(props),
     }) },
     UrlFetchApp: { fetch },
@@ -93,13 +97,15 @@ function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: 
     },
     DriveApp: { getFileById: () => ({ moveTo: () => {} }), getFolderById: () => ({}) },
     ScriptApp: {},
+    LockService: { getScriptLock: () => ({ tryLock: () => !opts.locked, releaseLock: () => { events.push('unlock'); } }) },
     Intl, Date, JSON, Math, Object, String, encodeURIComponent, Error, Array,
   };
+  saveHook = id => events.push('save:' + id);
   vm.createContext(ctx);
   const root = join(__dirname, '..', '..', 'archive');
   vm.runInContext(readFileSync(join(root, 'format.js'), 'utf8'), ctx);
   vm.runInContext(readFileSync(join(root, 'sync.js'), 'utf8'), ctx);
-  return { run: () => (ctx.syncArchive as () => void)(), docs, props, log, db };
+  return { run: () => (ctx.syncArchive as () => void)(), docs, props, log, db, events };
 }
 
 const profiles = [{ id: 'u1', name: 'Alessandra' }, { id: 'u2', name: 'Marco' }];
@@ -186,5 +192,30 @@ describe('sincronizzazione archivio', () => {
     expect((env.db as any).status.last_error).toMatch(/500/);
     expect((env.db as any).status.last_ok_at).toBeUndefined();
     expect(env.props.get('WATERMARK')).toBeUndefined();
+  });
+
+  it('salva il Doc prima di far avanzare il segnaposto', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue(), issue({ id: 'i2', number: 2 })] });
+    env.run();
+    const wm = env.events.map((e, i) => [e, i] as const).filter(([e]) => e === 'wm');
+    expect(wm).toHaveLength(2);
+    for (const [, i] of wm) expect(env.events[i - 1]).toMatch(/^save:/);
+  });
+
+  it('se un altro giro è in corso non fa niente (niente doppioni)', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] }, { locked: true });
+    env.run();
+    expect(env.docs.size).toBe(0);
+    expect(env.log.some(l => l.path === '/rest/v1/issues')).toBe(false);
+  });
+
+  it('ignora le modifiche degli ultimi 30 secondi (transazioni non ancora visibili) e le prende al giro dopo', () => {
+    const fresh = new Date().toISOString();
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue({ updated_at: fresh, created_at: fresh })] });
+    env.run();
+    expect(env.docs.size).toBe(0);
+    env.db.issues[0].updated_at = '2026-11-04T09:00:00+00:00';
+    env.run();
+    expect(env.docs.size).toBe(1);
   });
 });

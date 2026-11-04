@@ -18,7 +18,6 @@ export function frameScale(frameWidth: number, innerWidth: number): number {
 export function createCapturer(win: Window): Capturer {
   let stream: MediaStream | null = null;
   let video: HTMLVideoElement | null = null;
-  let denied = false;
 
   const nextFrame = () => new Promise<void>(r => (win.requestAnimationFrame ? win.requestAnimationFrame(() => r()) : setTimeout(r, 16)));
 
@@ -34,7 +33,6 @@ export function createCapturer(win: Window): Capturer {
   return {
     async start() {
       if (stream) return true;
-      if (denied) return false;
       try {
         const md = win.navigator.mediaDevices;
         stream = await md.getDisplayMedia({
@@ -49,8 +47,7 @@ export function createCapturer(win: Window): Capturer {
         stream.getVideoTracks()[0]?.addEventListener('ended', () => { stream = null; video = null; });
         return true;
       } catch {
-        denied = true;
-        stream = null; video = null;
+        stream = null; video = null; // al prossimo avvio della modalità Commenta Chrome lo richiede
         return false;
       }
     },

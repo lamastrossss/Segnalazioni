@@ -9,29 +9,42 @@ export function nextResizeDelta(targetInnerWidth: number, currentInnerWidth: num
   return Math.abs(d) <= 1 ? 0 : d;
 }
 
-/** Apre la pagina corrente in una finestra della viewport scelta e vi avvia il tool. */
+const POLL_MS = 500;
+const pollers = new Map<string, ReturnType<typeof setInterval>>();
+
+/**
+ * Apre la pagina corrente in una finestra della viewport scelta e vi avvia il tool.
+ * La finestra è sorvegliata: dopo ogni navigazione (link cliccato, nuovo clic su Mobile…)
+ * il tool viene reiniettato, perché nelle finestre popup non c'è la barra dei preferiti.
+ */
 export function openViewportWindow(win: Window, presetId: ViewportClass, toolSrc: string): Window | null {
   const p = VIEWPORT_PRESETS.find(x => x.id === presetId)!;
-  const popup = win.open(win.location.href, `sr-${p.id}`, `width=${p.width},height=${p.height}`);
+  const name = `sr-${p.id}`;
+  const popup = win.open(win.location.href, name, `width=${p.width},height=${p.height}`);
   if (!popup) return null;
 
   const fit = (attempt: number) => {
-    if (attempt >= FIT_ATTEMPTS) return;
+    if (attempt >= FIT_ATTEMPTS || popup.closed) return;
     const d = nextResizeDelta(p.width, popup.innerWidth);
     if (!d) return;
     popup.resizeBy(d, 0);
     setTimeout(() => fit(attempt + 1), FIT_INTERVAL_MS);
   };
-  popup.addEventListener('load', () => {
+  const injected = new WeakSet<Document>();
+  const check = () => {
+    if (popup.closed) { clearInterval(pollers.get(name)); pollers.delete(name); return; }
     try {
       const doc = popup.document;
-      if (!(popup as Window & { __stageReview?: unknown }).__stageReview) {
-        const s = doc.createElement('script');
-        s.src = `${toolSrc}?v=${Date.now()}`;
-        doc.documentElement.append(s);
-      }
-    } catch { /* pagina di un altro dominio: l'utente clicca Revisiona a mano */ }
-    fit(0);
-  });
+      if (injected.has(doc) || doc.readyState !== 'complete' || popup.location.href === 'about:blank') return;
+      injected.add(doc);
+      if ((popup as Window & { __stageReview?: unknown }).__stageReview) return;
+      const s = doc.createElement('script');
+      s.src = `${toolSrc}?v=${Date.now()}`;
+      doc.documentElement.append(s);
+      fit(0);
+    } catch { /* pagina di un altro dominio: niente tool in questa finestra */ }
+  };
+  clearInterval(pollers.get(name));
+  pollers.set(name, setInterval(check, POLL_MS));
   return popup;
 }

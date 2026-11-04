@@ -1,7 +1,7 @@
 import type { Issue, Profile } from '../shared/types';
 import { VIEWPORT_LABEL } from '../shared/viewport';
 import { el } from '../shared/dom';
-import { anchorPoint, resolveAnchor, type ResolvedAnchor } from './anchor';
+import { anchorPoint, isHidden, resolveAnchor, type ResolvedAnchor } from './anchor';
 import { initials } from './toolbar';
 
 interface PinItem { issue: Issue; muted: boolean; resolved: ResolvedAnchor; node: HTMLButtonElement }
@@ -25,6 +25,11 @@ export function createPinLayer(
     for (const it of items) {
       const p = anchorPoint(it.issue.anchor, it.resolved, win);
       it.node.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
+      const hidden = isHidden(it.resolved);
+      if (hidden !== it.node.classList.contains('sr-hidden-el')) {
+        it.node.classList.toggle('sr-hidden-el', hidden);
+        it.node.title = titleFor(it);
+      }
     }
   }
   const schedule = () => { if (!frame) frame = raf(position); };
@@ -43,6 +48,7 @@ export function createPinLayer(
     const parts = [`#${it.issue.number}`, author, it.issue.body.slice(0, 80)];
     if (it.muted) parts.push(`${VIEWPORT_LABEL[it.issue.viewport_class]} ${it.issue.viewport_width}`);
     if (it.resolved.moved) parts.push('Elemento spostato o rimosso');
+    else if (isHidden(it.resolved)) parts.push('Elemento non visibile ora (es. menu chiuso)');
     return parts.filter(Boolean).join(' · ');
   }
 

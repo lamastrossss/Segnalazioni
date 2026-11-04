@@ -14,3 +14,13 @@ describe('capture', () => {
     expect(await c.grab({ hide: document.body, pin: { x: 1, y: 1 } })).toBeNull();
   });
 });
+
+describe('capture dopo un rifiuto', () => {
+  it('riprova a chiedere il permesso alla volta successiva', async () => {
+    let calls = 0;
+    Object.defineProperty(navigator, 'mediaDevices', { value: { getDisplayMedia: () => { calls++; return Promise.reject(new Error('NotAllowed')); } }, configurable: true });
+    const c = createCapturer(window);
+    await c.start(); await c.start();
+    expect(calls).toBe(2);
+  });
+});

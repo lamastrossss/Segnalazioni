@@ -11,16 +11,38 @@ describe('finestre viewport', () => {
     const win = { open: vi.fn(() => null), location: { href: 'https://x/p' } } as unknown as Window;
     expect(openViewportWindow(win, 'mobile', 'https://u/tool.js')).toBeNull();
   });
-  it('apre la stessa pagina a 375×812 e inietta il tool al caricamento', () => {
+  it('apre la stessa pagina a 375×812 e inietta il tool quando è caricata', () => {
+    vi.useFakeTimers();
     const doc = document.implementation.createHTMLDocument('popup');
-    const listeners: Record<string, () => void> = {};
-    const popup = { document: doc, innerWidth: 375, resizeBy: vi.fn(), addEventListener: (t: string, f: () => void) => { listeners[t] = f; } };
+    Object.defineProperty(doc, 'readyState', { value: 'complete' });
+    const popup = { document: doc, innerWidth: 375, closed: false, resizeBy: vi.fn(), location: { href: 'https://x/p?v=1' } };
     const open = vi.fn(() => popup);
     const win = { open, location: { href: 'https://x/p?v=1' } } as unknown as Window;
     expect(openViewportWindow(win, 'mobile', 'https://u/tool.js')).toBe(popup);
     expect(open).toHaveBeenCalledWith('https://x/p?v=1', 'sr-mobile', 'width=375,height=812');
-    listeners.load();
-    const s = doc.querySelector('script')!;
-    expect(s.src).toMatch(/^https:\/\/u\/tool\.js\?v=\d+$/);
+    vi.advanceTimersByTime(600);
+    expect(doc.querySelector('script')!.src).toMatch(/^https:\/\/u\/tool\.js\?v=\d+$/);
+    popup.closed = true; vi.advanceTimersByTime(600);
+    vi.useRealTimers();
+  });
+});
+
+describe('finestre viewport dopo una navigazione', () => {
+  it('reinietta il tool quando la finestra carica una nuova pagina', async () => {
+    vi.useFakeTimers();
+    const mkDoc = () => { const d = document.implementation.createHTMLDocument('p'); Object.defineProperty(d, 'readyState', { value: 'complete' }); return d; };
+    const popup: any = { document: mkDoc(), innerWidth: 375, closed: false, resizeBy: vi.fn(), addEventListener: () => {}, location: { href: 'https://x/a' } };
+    const win = { open: vi.fn(() => popup), location: { href: 'https://x/a' } } as unknown as Window;
+    openViewportWindow(win, 'mobile', 'https://u/tool.js');
+    vi.advanceTimersByTime(600);
+    expect(popup.document.querySelectorAll('script')).toHaveLength(1);
+    vi.advanceTimersByTime(1200);
+    expect(popup.document.querySelectorAll('script')).toHaveLength(1); // non duplica sulla stessa pagina
+    popup.document = mkDoc(); popup.location.href = 'https://x/b'; // l'utente ha cliccato un link nella finestra
+    vi.advanceTimersByTime(600);
+    expect(popup.document.querySelectorAll('script')).toHaveLength(1);
+    popup.closed = true;
+    vi.advanceTimersByTime(600);
+    vi.useRealTimers();
   });
 });

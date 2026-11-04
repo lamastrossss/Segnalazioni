@@ -24,8 +24,8 @@ describe('database Supabase', () => {
 
   it('la registrazione crea il profilo con nome e colore', async () => {
     const db = await freshDb();
-    await db.exec(`insert into auth.users (id, email, raw_user_meta_data) values
-      ('00000000-0000-4000-8000-000000000001', 'c@thewavestudio.it', '{"name":"Chiara"}')`);
+    await db.exec(`insert into auth.users (id, email, raw_user_meta_data, email_confirmed_at) values
+      ('00000000-0000-4000-8000-000000000001', 'c@thewavestudio.it', '{"name":"Chiara"}', now())`);
     const r = await db.query<{ name: string; color: string }>('select name, color from public.profiles');
     expect(r.rows[0].name).toBe('Chiara');
     expect(r.rows[0].color).toMatch(/^#[0-9A-F]{6}$/i);
