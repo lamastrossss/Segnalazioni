@@ -16,6 +16,8 @@ import { createComposer } from './composer';
 import { createAnchor, resolveAnchor } from './anchor';
 import { findDuplicates } from './pin-logic';
 import { renderAuthForm } from '../shared/auth-ui';
+import { openViewportWindow } from './viewport-window';
+import { usageLevel } from '../shared/usage';
 
 export interface SessionCtx {
   win: Window; root: { host: HTMLElement; shadow: ShadowRoot };
@@ -43,7 +45,11 @@ export function createSession(ctx: SessionCtx) {
 
   const toolbar = createToolbar(shadow, project.name, {
     onToggleComment: () => mode.toggle(),
-    onViewport: () => {},
+    onViewport: id => {
+      if (!openViewportWindow(win, id, `${CONFIG.publicBaseUrl}tool.js`)) {
+        toolbar.showMessage('Chrome ha bloccato la finestra: consenti i popup per questo sito.', 'error');
+      }
+    },
     onToggleAllViewports: () => { state.allViewports = !state.allViewports; render(); },
     onToggleResolved: () => { state.resolved = !state.resolved; render(); },
     onOpenList: () => toggleList(),
@@ -166,16 +172,28 @@ export function createSession(ctx: SessionCtx) {
     return pins.focus(id);
   }
 
+  const presence = ctx.live.join(project.id, {
+    userId: ctx.me.id, name: ctx.me.name, color: ctx.me.color, page_path: state.pagePath, viewport_class: state.viewport,
+  }, others => toolbar.setPresence(others));
+  cleanups.push(() => presence.leave());
+  cleanups.push(ctx.live.subscribe(project.id, id => {
+    void refreshIssue(id).then(() => composer.refreshIfIdle(id));
+  }));
+
   const onResize = () => {
     const next = classifyViewport(win.innerWidth);
     const changed = next !== state.viewport;
     state.viewport = next;
-    if (changed) render(); else toolbar.setViewport(state.viewport, win.innerWidth);
+    if (changed) { render(); presence.update({ viewport_class: next }); } else toolbar.setViewport(state.viewport, win.innerWidth);
   };
   win.addEventListener('resize', onResize);
   cleanups.push(() => win.removeEventListener('resize', onResize));
 
-  cleanups.push(watchLocation(win, url => { state.pagePath = pagePathOf(url); render(); }));
+  cleanups.push(watchLocation(win, url => {
+    state.pagePath = pagePathOf(url);
+    render();
+    presence.update({ page_path: state.pagePath });
+  }));
 
   const ready = (async () => {
     const [list, people] = await Promise.all([api.listIssues(project.id), api.profiles()]);
@@ -183,6 +201,11 @@ export function createSession(ctx: SessionCtx) {
     if (!list.ok) { toolbar.showMessage(list.error.message, 'error', true); return; }
     for (const i of list.value) issues.set(i.id, i);
     render();
+    void api.totalUsageBytes().then(u => {
+      if (!u.ok) return;
+      const level = usageLevel(u.value);
+      if (level.warn) toolbar.showMessage(`Spazio quasi pieno (${Math.round(level.ratio * 100)}%): fate pulizia dalla board.`, 'error');
+    });
     const focusId = parseFocusHash(win.location.hash);
     if (focusId && !focusIssue(focusId)) toolbar.showMessage('La segnalazione indicata non è su questa pagina o è stata eliminata.');
   })();

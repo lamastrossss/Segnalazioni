@@ -248,6 +248,12 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
     isOpen: () => !!panel,
     /** Id della segnalazione aperta nel thread, se c'è (per gli aggiornamenti live). */
     currentThread: () => threadId,
+    /** Ricarica il thread aperto dopo una modifica live, ma non se si sta scrivendo una risposta. */
+    refreshIfIdle(issueId: string) {
+      if (threadId !== issueId || !panel) return;
+      const typing = [...panel.querySelectorAll('textarea')].some(t => t.value.trim() !== '' || shadow.activeElement === t);
+      if (!typing) void openThread(issueId);
+    },
   };
 }
 export type Composer = ReturnType<typeof createComposer>;

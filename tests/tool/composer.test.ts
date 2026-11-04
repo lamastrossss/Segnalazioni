@@ -135,3 +135,16 @@ describe('thread', () => {
     expect(api.setStatus).toHaveBeenCalledWith('i1', 'resolved');
   });
 });
+
+describe('thread live', () => {
+  it('non ricarica il thread mentre si scrive una risposta', async () => {
+    const { api, composer } = setup();
+    api.getIssue.mockResolvedValue({ ok: true, value: { ...makeIssue({ id: 'i1' }), replies: [], attachments: [] } });
+    await composer.openThread('i1');
+    shadow.querySelector('textarea')!.value = 'sto scrivendo';
+    composer.refreshIfIdle('i1');
+    await flush();
+    expect(api.getIssue).toHaveBeenCalledTimes(1);
+    expect(shadow.querySelector('textarea')!.value).toBe('sto scrivendo');
+  });
+});
