@@ -39,3 +39,15 @@ export function joinPresence(
     leave() { void channel.untrack(); void client.removeChannel(channel); },
   };
 }
+
+/** Interfaccia del realtime usata dal tool e dalla board (sostituibile nei test). */
+export interface LiveAdapter {
+  subscribe(projectId: string, onIssueChanged: (issueId: string) => void): () => void;
+  join(projectId: string, me: PresenceState, onSync: (others: PresenceState[]) => void): { update(p: Partial<PresenceState>): void; leave(): void };
+}
+export function createLive(client: SupabaseClient): LiveAdapter {
+  return {
+    subscribe: (projectId, cb) => subscribeProject(client, projectId, cb),
+    join: (projectId, me, onSync) => joinPresence(client, projectId, me, onSync),
+  };
+}
