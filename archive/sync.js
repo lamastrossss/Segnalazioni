@@ -27,12 +27,14 @@ function syncArchive() {
 
 function srRun_() {
   var started = Date.now();
+  srEnsured_ = {};
   var props = PropertiesService.getScriptProperties();
   var cfg = srConfig_(props);
   var error = null;
   try {
     var profiles = srIndex_(srRest_(cfg, 'get', '/rest/v1/profiles?select=id,name'));
     var projects = srIndex_(srRest_(cfg, 'get', '/rest/v1/projects?select=id,name,archive_doc_url'));
+    srPrepareSheets_(cfg, props, projects);
     var settled = encodeURIComponent(new Date(Date.now() - SR_SETTLE_MS).toISOString());
     var more = true;
     while (more && Date.now() - started < SR_MAX_RUN_MS) {
@@ -127,6 +129,7 @@ function srSheetFor_(cfg, props, project) {
     var existing = ss.getSheets()[0];
     // fogli creati prima della rimozione del +1: si toglie la colonna, i dati restano allineati
     if (existing.getRange(1, 8).getValues()[0][0] === '+1') existing.deleteColumn(8);
+    srEnsureEditTrigger_(ss);
     return existing;
   }
   ss = SpreadsheetApp.create(wanted);
@@ -140,7 +143,58 @@ function srSheetFor_(cfg, props, project) {
   SR_WIDTHS.forEach(function (w, i) { sheet.setColumnWidth(i + 1, w); });
   sheet.hideColumns(SR_COL.ID);
   srRest_(cfg, 'patch', '/rest/v1/projects?id=eq.' + project.id, { archive_doc_url: ss.getUrl() });
+  srEnsureEditTrigger_(ss);
   return sheet;
+}
+
+/** Un ascoltatore per foglio: cambiare lo Stato nel foglio lo salva in Stage Review. */
+var srEnsured_ = {};
+function srEnsureEditTrigger_(ss) {
+  var id = ss.getId();
+  if (srEnsured_[id]) return;
+  var exists = ScriptApp.getProjectTriggers().some(function (t) {
+    return t.getHandlerFunction() === 'onStatoEdit' && t.getTriggerSourceId() === id;
+  });
+  if (!exists) ScriptApp.newTrigger('onStatoEdit').forSpreadsheet(ss).onEdit().create();
+  srEnsured_[id] = true;
+}
+
+/** Ascoltatore: chiamato da Google quando qualcuno modifica il foglio. */
+function onStatoEdit(e) {
+  var range = e && e.range;
+  if (!range) return;
+  var sheet = range.getSheet();
+  if (sheet.getName() !== 'Segnalazioni') return;
+  var c0 = range.getColumn(), c1 = c0 + range.getNumColumns() - 1;
+  if (SR_COL.Stato < c0 || SR_COL.Stato > c1) return;
+  var cfg = null;
+  for (var row = Math.max(2, range.getRow()); row <= range.getRow() + range.getNumRows() - 1; row++) {
+    var cell = sheet.getRange(row, SR_COL.Stato);
+    var status = SR_STATUS_KEY[cell.getValue()];
+    var id = sheet.getRange(row, SR_COL.ID).getValue();
+    if (!status || !id) continue;
+    try {
+      cfg = cfg || srConfig_(PropertiesService.getScriptProperties());
+      srRest_(cfg, 'patch', '/rest/v1/issues?id=eq.' + encodeURIComponent(id), { status: status });
+      cell.setNote('');
+    } catch (err) {
+      cell.setNote('Stato non salvato in Stage Review: ' + String((err && err.message) || err).slice(0, 200));
+    }
+  }
+}
+
+function srStatusRule_() {
+  return SpreadsheetApp.newDataValidation().requireValueInList(['Aperta', 'In lavorazione', 'Risolta'], true).setAllowInvalid(false).build();
+}
+
+/** A ogni giro: ogni foglio già creato ha l'ascoltatore e il menu dello Stato su tutte le righe. */
+function srPrepareSheets_(cfg, props, projects) {
+  Object.keys(projects).forEach(function (pid) {
+    if (!props.getProperty('sheet:' + pid)) return;
+    var sheet = srSheetFor_(cfg, props, projects[pid]);
+    var last = sheet.getLastRow();
+    if (last >= 2) sheet.getRange(2, SR_COL.Stato, last - 1, 1).setDataValidation(srStatusRule_());
+  });
 }
 
 /** Numero di riga della segnalazione (colonna ID), oppure -1. */
@@ -168,7 +222,9 @@ function srWriteIssue_(cfg, props, project, issue, profiles) {
   var built = buildRow(issue, profiles, SR_TZ, urls);
   var row = srFindRow_(sheet, issue.id);
   if (row < 0) row = sheet.getLastRow() + 1;
+  if (row > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), 100);
   sheet.getRange(row, 1, 1, SR_COLUMNS.length).setValues([built.values]);
+  sheet.getRange(row, SR_COL.Stato).setDataValidation(srStatusRule_());
 
   built.links.forEach(function (spec) {
     var text = spec.parts.map(function (p) { return p.label; }).join(', ');

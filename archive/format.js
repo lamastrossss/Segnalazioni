@@ -3,6 +3,7 @@
 
 var SR_VIEWPORT = { mobile: 'Mobile', tablet: 'Tablet', desktop: 'Desktop' };
 var SR_STATUS = { open: 'Aperta', in_progress: 'In lavorazione', resolved: 'Risolta' };
+var SR_STATUS_KEY = { 'Aperta': 'open', 'In lavorazione': 'in_progress', 'Risolta': 'resolved' };
 var SR_COLUMNS = ['#', 'Stato', 'Pagina', 'Viewport', 'Segnalazione', 'Autore', 'Data', 'Risposte',
   'Screenshot', 'Anteprima', 'Allegati', 'Apri nel sito', 'ID'];
 var SR_COL = {};

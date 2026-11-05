@@ -9,6 +9,10 @@ class Sheet {
   rows: Cell[][] = [];
   rich = new Map<string, { text: string; links: { start: number; end: number; url: string }[] }>();
   name = 'Foglio1'; frozen = 0; hidden: number[] = []; heights = new Map<number, number>();
+  maxRows = 1000; validation = new Map<string, any>(); notes = new Map<string, string>();
+  getName() { return this.name; }
+  getMaxRows() { return this.maxRows; }
+  insertRowsAfter(_after: number, n: number) { this.maxRows += n; return this; }
   setName(n: string) { this.name = n; return this; }
   getLastRow() { return this.rows.length; }
   setFrozenRows(n: number) { this.frozen = n; }
@@ -19,7 +23,12 @@ class Sheet {
   deleteColumn(c: number) { this.rows.forEach(row => row.splice(c - 1, 1)); this.hidden = this.hidden.map(h => (h > c ? h - 1 : h)); return this; }
   getRange(r: number, c: number, nr = 1, nc = 1) {
     const sheet = this;
+    if (r + nr - 1 > this.maxRows) throw new Error('Le coordinate dell\'intervallo non rientrano nelle dimensioni del foglio.');
     return {
+      getRow: () => r, getColumn: () => c, getNumRows: () => nr, getNumColumns: () => nc, getSheet: () => sheet,
+      getValue: () => sheet.rows[r - 1]?.[c - 1] ?? '',
+      setDataValidation: (rule: any) => { for (let i = 0; i < nr; i++) sheet.validation.set(`${r + i},${c}`, rule); return undefined; },
+      setNote: (t: string) => { if (t) sheet.notes.set(`${r},${c}`, t); else sheet.notes.delete(`${r},${c}`); return undefined; },
       getValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => sheet.rows[r - 1 + i]?.[c - 1 + j] ?? '')),
       setValues: (v: Cell[][]) => {
         if (v.length !== nr || v.some(row => row.length !== nc)) throw new Error('dimensioni non corrispondenti');
@@ -43,7 +52,8 @@ class Spreadsheet {
 }
 
 interface Row { [k: string]: any }
-function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: { failIssues?: boolean; failSign?: boolean; locked?: boolean } = {}) {
+function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: { failIssues?: boolean; failSign?: boolean; locked?: boolean; failPatch?: boolean } = {}) {
+  const triggers: { fn: string; source: string }[] = [];
   const props = new Map<string, string>([['SUPABASE_URL', 'https://sb.test'], ['SERVICE_ROLE_KEY', 'service'], ['FOLDER_ID', 'folder']]);
   const sheets = new Map<string, Spreadsheet>();
   const events: string[] = [];
@@ -66,6 +76,11 @@ function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: 
       Object.assign(db.projects.find(p => p.id === id)!, body); return json(null);
     }
     if (u.pathname === '/rest/v1/archive_status') { (db as any).status = { ...((db as any).status ?? {}), ...body }; return json(null); }
+    if (u.pathname === '/rest/v1/issues' && method === 'patch') {
+      if (opts.failPatch) return json({ message: 'rete' }, 503);
+      const id = u.searchParams.get('id')!.replace('eq.', '');
+      Object.assign(db.issues.find(i => i.id === id) ?? {}, body); return json(null);
+    }
     if (u.pathname === '/rest/v1/issues') {
       if (opts.failIssues) return json({ message: 'boom' }, 500);
       const lt = u.searchParams.get('updated_at');
@@ -90,6 +105,11 @@ function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: 
       create: (name: string) => { const s = new Spreadsheet(`sheet${++n}`, name); sheets.set(s.id, s); return s; },
       openById: (id: string) => { const s = sheets.get(id); if (!s) throw new Error('no sheet'); return s; },
       flush: () => { events.push('flush'); },
+      newDataValidation: () => {
+        const rule: any = {};
+        const b = { requireValueInList: (l: string[], show: boolean) => { rule.list = l; rule.show = show; return b; }, setAllowInvalid: (x: boolean) => { rule.allowInvalid = x; return b; }, build: () => rule };
+        return b;
+      },
       newRichTextValue: () => {
         const rt: any = { text: '', links: [] };
         const b = { setText: (t: string) => { rt.text = t; return b; }, setLinkUrl: (s: number, e: number, url: string) => { rt.links.push({ start: s, end: e, url }); return b; }, build: () => rt };
@@ -97,7 +117,10 @@ function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: 
       },
     },
     DriveApp: { getFileById: () => ({ moveTo: () => {} }), getFolderById: () => ({}) },
-    ScriptApp: {},
+    ScriptApp: {
+      getProjectTriggers: () => triggers.map(t => ({ getHandlerFunction: () => t.fn, getTriggerSourceId: () => t.source })),
+      newTrigger: (fn: string) => ({ forSpreadsheet: (ss: Spreadsheet) => ({ onEdit: () => ({ create: () => { triggers.push({ fn, source: ss.getId() }); } }) }) }),
+    },
     LockService: { getScriptLock: () => ({ tryLock: () => !opts.locked, releaseLock: () => {} }) },
     Intl, Date, JSON, Math, Object, String, encodeURIComponent, Error, Array,
   };
@@ -105,7 +128,9 @@ function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: 
   const root = join(__dirname, '..', '..', 'archive');
   vm.runInContext(readFileSync(join(root, 'format.js'), 'utf8'), ctx);
   vm.runInContext(readFileSync(join(root, 'sync.js'), 'utf8'), ctx);
-  return { run: () => (ctx.syncArchive as () => void)(), sheets, props, log, db, events };
+  const edit = (ss: Spreadsheet, row: number, col: number, nr = 1, nc = 1) =>
+    (ctx.onStatoEdit as (e: unknown) => void)({ range: ss.getSheets()[0].getRange(row, col, nr, nc) });
+  return { run: () => (ctx.syncArchive as () => void)(), sheets, props, log, db, events, triggers, edit };
 }
 
 const profiles = [{ id: 'u1', name: 'Alessandra' }, { id: 'u2', name: 'Marco' }];
@@ -257,5 +282,74 @@ describe('archivio su Fogli Google', () => {
     expect(ids(s)).toEqual(['i1']);
     expect(s.rows[1][1]).toBe('Risolta');
     expect(s.hidden).toEqual([13]);
+  });
+
+  it('colonna Stato con menu a tendina e un solo ascoltatore delle modifiche per foglio', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue(), issue({ id: 'i2', number: 2 })] });
+    env.run();
+    const ss = [...env.sheets.values()][0];
+    const s = ss.getSheets()[0];
+    expect(s.validation.get('2,2')).toEqual({ list: ['Aperta', 'In lavorazione', 'Risolta'], show: true, allowInvalid: false });
+    expect(s.validation.get('3,2')).toBeDefined();
+    Object.assign(env.db.issues[0], { status: 'resolved', updated_at: '2026-11-04T11:00:00+00:00' });
+    env.run();
+    expect(env.triggers).toEqual([{ fn: 'onStatoEdit', source: ss.getId() }]);
+  });
+
+  it('cambiare lo stato nel foglio lo salva in Stage Review', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue(), issue({ id: 'i2', number: 2 })] });
+    env.run();
+    const ss = [...env.sheets.values()][0];
+    const s = ss.getSheets()[0];
+    s.rows[2][1] = 'Risolta';
+    env.edit(ss, 3, 2);
+    const patches = env.log.filter(l => l.method === 'patch' && l.path === '/rest/v1/issues');
+    expect(patches).toEqual([{ method: 'patch', path: '/rest/v1/issues', body: { status: 'resolved' } }]);
+    expect(env.db.issues[1].status).toBe('resolved');
+  });
+
+  it('incollare lo stato su più righe le salva tutte; le altre colonne e i valori non validi si ignorano', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue(), issue({ id: 'i2', number: 2 })] });
+    env.run();
+    const ss = [...env.sheets.values()][0];
+    const s = ss.getSheets()[0];
+    s.rows[1][1] = 'In lavorazione'; s.rows[2][1] = 'Risolta';
+    env.edit(ss, 2, 1, 2, 3); // incolla su colonne 1-3, che includono Stato
+    expect(env.db.issues.map(i => i.status)).toEqual(['in_progress', 'resolved']);
+    const before = env.log.length;
+    s.rows[1][4] = 'testo cambiato'; env.edit(ss, 2, 5);   // colonna Segnalazione
+    s.rows[1][1] = 'Boh'; env.edit(ss, 2, 2);              // valore non valido
+    env.edit(ss, 1, 2);                                    // intestazione
+    expect(env.log.length).toBe(before);
+  });
+
+  it('se il salvataggio fallisce lo segnala con una nota sulla cella', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] }, { failPatch: true });
+    env.run();
+    const ss = [...env.sheets.values()][0];
+    ss.getSheets()[0].rows[1][1] = 'Risolta';
+    env.edit(ss, 2, 2);
+    expect(ss.getSheets()[0].notes.get('2,2')).toMatch(/^Stato non salvato in Stage Review/);
+  });
+
+  it('oltre le righe disponibili il foglio si allunga da solo', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] });
+    env.run();
+    const s = sheetOf(env);
+    s.maxRows = 2; // foglio pieno
+    env.db.issues.push(issue({ id: 'i3', number: 3, updated_at: '2026-11-04T12:00:00+00:00' }));
+    env.run();
+    expect(ids(s)).toEqual(['i1', 'i3']);
+  });
+
+  it('i fogli già esistenti ricevono menu e ascoltatore anche senza novità', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] });
+    env.run();
+    const ss = [...env.sheets.values()][0];
+    env.triggers.length = 0;                       // foglio creato dalla versione precedente
+    ss.getSheets()[0].validation.clear();
+    env.run();                                     // nessuna segnalazione nuova o modificata
+    expect(env.triggers).toEqual([{ fn: 'onStatoEdit', source: ss.getId() }]);
+    expect(ss.getSheets()[0].validation.get('2,2')).toBeDefined();
   });
 });

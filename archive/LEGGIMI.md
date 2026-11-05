@@ -35,8 +35,12 @@ Gira sul tuo account Google, gratis.
    *Ultimo archivio* mostra l'orario.
 
 ## Buono a sapersi
-- L'archivio va in una sola direzione: le modifiche fatte a mano nel foglio non tornano
-  nel tool e vengono sovrascritte alla modifica successiva della segnalazione.
+- **Lo Stato si può cambiare dal foglio** (menu a tendina): viene salvato subito in Stage Review
+  e la board si aggiorna. Se il salvataggio non riesce, sulla cella compare una nota.
+- Le altre colonne vanno in una sola direzione: le modifiche fatte a mano non tornano nel
+  tool e vengono sovrascritte alla modifica successiva della segnalazione.
+- Google permette circa 20 "ascoltatori" per script: lo stato modificabile dal foglio
+  funziona per circa 20 siti.
 - Puoi aggiungere colonne tue a destra di "Apri nel sito": non vengono toccate.
 - Se un giro fallisce, Google ti manda un'email e la board mostra l'errore. Il
   giro dopo riprende da dove si era fermato, senza perdere niente.
