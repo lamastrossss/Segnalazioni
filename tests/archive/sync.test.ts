@@ -9,6 +9,7 @@ class P {
   constructor(t: string) { this.text = t; }
   // Come in Apps Script: Paragraph.setText non restituisce niente (non si può concatenare)
   setText(t: string): void { this.text = t; }
+  getText() { return this.text; }
   setHeading(h: string) { this.heading = h; return this; }
   appendInlineImage(blob: { bad?: boolean }) {
     if (blob.bad) throw new Error('Invalid image data');
@@ -25,6 +26,8 @@ class Doc {
   named = new Map<string, P[][]>();
   constructor(public id: string, public name: string) {}
   getId() { return this.id; }
+  getName() { return this.name; }
+  setName(n: string) { this.name = n; return this; }
   getUrl() { return `https://docs.google.com/document/d/${this.id}/edit`; }
   saveAndClose() { saveHook(this.id); }
   getBody() {
@@ -218,5 +221,17 @@ describe('sincronizzazione archivio', () => {
     env.db.issues[0].updated_at = '2026-11-04T09:00:00+00:00';
     env.run();
     expect(env.docs.size).toBe(1);
+  });
+
+  it('se il sito viene rinominato, al giro dopo aggiorna nome e titolo del Doc', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'i1pw9r-dv.myshopify.com' }], profiles, issues: [issue()] });
+    env.run();
+    const doc = [...env.docs.values()][0];
+    env.db.projects[0].name = 'Rica Haircare';
+    Object.assign(env.db.issues[0], { status: 'resolved', updated_at: '2026-11-04T11:00:00+00:00' });
+    env.run();
+    expect(env.docs.size).toBe(1);
+    expect(doc.name).toBe('Stage Review — Rica Haircare');
+    expect(doc.texts()[0]).toBe('Stage Review — Rica Haircare');
   });
 });

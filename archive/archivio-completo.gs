@@ -200,14 +200,21 @@ function srIndex_(rows) {
 function srDocFor_(cfg, props, project) {
   var id = props.getProperty('doc:' + project.id);
   var doc = null;
+  var wanted = 'Stage Review — ' + project.name;
   if (id) { try { doc = DocumentApp.openById(id); } catch (e) { doc = null; } }
+  if (doc && doc.getName() !== wanted) {
+    // sito rinominato nella board: aggiorna il nome del file e il titolo in cima al Doc
+    doc.setName(wanted);
+    var top = doc.getBody().getChild(0).asParagraph();
+    if (top.getText().indexOf('Stage Review — ') === 0) top.setText(wanted);
+  }
   if (!doc) {
-    doc = DocumentApp.create('Stage Review — ' + project.name);
+    doc = DocumentApp.create(wanted);
     props.setProperty('doc:' + project.id, doc.getId()); // subito: un errore dopo non crea Doc doppi
     DriveApp.getFileById(doc.getId()).moveTo(DriveApp.getFolderById(cfg.folder));
     var body = doc.getBody();
     var title = body.getChild(0).asParagraph();
-    title.setText('Stage Review — ' + project.name); // setText non restituisce il paragrafo: niente catene
+    title.setText(wanted); // setText non restituisce il paragrafo: niente catene
     title.setHeading(DocumentApp.ParagraphHeading.TITLE);
     body.appendParagraph('Archivio automatico delle segnalazioni, aggiornato ogni 10 minuti. Non modificare i blocchi delle segnalazioni: il testo scritto fuori dai blocchi resta intatto.');
     srRest_(cfg, 'patch', '/rest/v1/projects?id=eq.' + project.id, { archive_doc_url: doc.getUrl() });
