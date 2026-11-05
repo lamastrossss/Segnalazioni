@@ -14,6 +14,7 @@ update public.profiles p
   , ('giovanna.pavano@thewavestudio.it', 'Giovanna Pavano')
   , ('luca.valenti@thewavestudio.it', 'Luca Valenti')
   , ('michele.cocuccio@thewavestudio.it', 'Michele Cocuccio')
+  , ('roberto.drago@thewavestudio.it', 'Roberto Drago')
   ) as v(email, nome) on lower(u.email) = lower(v.email)
  where p.id = u.id;
 
