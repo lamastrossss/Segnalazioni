@@ -1,14 +1,13 @@
 import type { Project } from '../shared/types';
 import type { Api } from '../shared/api';
 import { el } from '../shared/dom';
+import { stageLinks } from './stage-links';
 
 /** Nome del sito (rinominabile) con sotto i link degli stage collegati. */
 export function renderSiteHeader(container: HTMLElement, deps: { project: Project; api: Api; onRenamed: (name: string) => void }) {
   let name = deps.project.name;
-  const domains = el('p', { class: 'site-domains muted' }, deps.project.domains.flatMap((d, i) => [
-    i ? ' · ' : '',
-    el('a', { text: d, attrs: { href: `https://${d}/`, target: '_blank', rel: 'noopener' } }),
-  ]));
+  const domains = stageLinks(deps.project.domains);
+  domains.classList.add('site-domains');
   const titleRow = el('div', { class: 'site-title' });
   const wrap = el('div', { class: 'site-header' }, [titleRow, domains]);
   container.append(wrap);

@@ -35,8 +35,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .site-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .site-title h2 { font-size: 22px; margin: 0; overflow-wrap: anywhere; }
 .site-domains { margin: 6px 0 0; }
-.site-domains a { color: var(--muted); }
-.site-domains a:hover { color: var(--fg); }
+.stage-links { margin: 0 0 12px; word-break: break-all; }
+.stage-link { color: var(--muted); text-decoration: none; }
+.stage-link .arrow { display: inline-block; margin-left: 4px; transition: transform .15s ease; }
+.stage-link:hover, .stage-link:focus-visible { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
+.stage-link:hover .arrow { transform: translate(1px, -1px); }
+@media (prefers-reduced-motion: reduce) { .stage-link .arrow { transition: none; } }
+.site-header .stage-links { margin: 6px 0 0; }
 .site-rename { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .site-rename input { font: inherit; font-size: 18px; font-weight: 600; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; min-width: min(360px, 100%); }
 .btn.small { padding: 6px 12px; font-size: 13px; }

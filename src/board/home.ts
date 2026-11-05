@@ -3,6 +3,7 @@ import { archiveHealth } from './logic';
 import { usageLevel } from '../shared/usage';
 import { formatDate, STATUS_LABEL } from '../shared/format';
 import { el } from '../shared/dom';
+import { stageLinks } from './stage-links';
 
 const board = await initBoard('Stage Review');
 const { api, main } = board;
@@ -43,7 +44,7 @@ async function renderProjects() {
   }
   grid.replaceChildren(...r.value.map(p => el('article', { class: 'card' }, [
     el('h2', {}, [el('a', { text: p.name, attrs: { href: `./site.html?id=${encodeURIComponent(p.id)}` } })]),
-    el('p', { class: 'muted domains', text: p.domains.join(' · ') }),
+    stageLinks(p.domains),
     el('div', { class: 'chips' }, [
       el('span', { class: 'chip open', text: `${p.open} ${STATUS_LABEL.open.toLowerCase()}` }),
       el('span', { class: 'chip in_progress', text: `${p.in_progress} ${STATUS_LABEL.in_progress.toLowerCase()}` }),

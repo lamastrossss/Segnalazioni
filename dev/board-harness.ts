@@ -3,6 +3,7 @@ import '../src/board/board.css';
 import icon from '../board/public/icon.png';
 import { el } from '../src/shared/dom';
 import { renderSiteHeader } from '../src/board/site-header';
+import { stageLinks } from '../src/board/stage-links';
 import { renderAuthForm, renderChangePassword } from '../src/shared/auth-ui';
 import { TOOL_CSS } from '../src/tool/styles';
 import type { Auth } from '../src/shared/auth';
@@ -31,3 +32,11 @@ app.append(el('div', { class: 'filters' }, [
 
 if (mode === 'login') { const w = el('div', { class: 'auth-wrap' }); app.replaceChildren(w); void renderAuthForm(w, fakeAuth); }
 if (mode === 'password') { const w = el('div', { class: 'auth-wrap' }); app.children[0].after(w); renderChangePassword(w, fakeAuth, () => {}); }
+
+app.append(el('div', { class: 'grid', attrs: { style: 'margin-top:24px' } }, [el('article', { class: 'card' }, [
+  el('h2', {}, [el('a', { text: 'Rica', attrs: { href: '#' } })]),
+  stageLinks(['i1pw9r-dv.myshopify.com']),
+  el('div', { class: 'chips' }, [el('span', { class: 'chip open', text: '0 aperta' }), el('span', { class: 'chip in_progress', text: '0 in lavorazione' }), el('span', { class: 'chip resolved', text: '0 risolta' })]),
+  el('p', { class: 'muted', text: 'Nessuna attività' }),
+  el('div', { class: 'chips' }, [el('a', { class: 'btn', text: 'Apri', attrs: { href: '#' } })]),
+])]));
