@@ -86,4 +86,33 @@ describe('altre operazioni', () => {
     const r = await api.renameProject('p1', '   ');
     expect(r.ok === false && r.error.message).toBe('Il nome non può essere vuoto.');
   });
+  it('deleteProject chiama la funzione del database', async () => {
+    const { fake, api } = setup();
+    let args: any;
+    fake.on('rpc:delete_project', c => { args = c; return { data: null, error: null }; });
+    expect(await api.deleteProject('p1')).toEqual({ ok: true, value: undefined });
+    expect(args).toBeDefined();
+  });
+  it('setStages toglie quelli rimossi e aggiunge i nuovi (normalizzati)', async () => {
+    const { fake, api } = setup();
+    fake.on('project_domains:delete', () => ({ data: null, error: null }));
+    fake.on('project_domains:insert', () => ({ data: null, error: null }));
+    const r = await api.setStages('p1', ['a.myshopify.com', 'b.myshopify.com'], ['https://B.myshopify.com/products?x=1', 'c.shopifypreview.com']);
+    expect(r).toEqual({ ok: true, value: ['b.myshopify.com', 'c.shopifypreview.com'] });
+    const del = fake.calls.find(c => c.table === 'project_domains' && c.op === 'delete')!;
+    expect(del.filters).toEqual([['eq', 'project_id', 'p1'], ['in', 'domain', ['a.myshopify.com']]]);
+    const ins = fake.calls.find(c => c.table === 'project_domains' && c.op === 'insert')!;
+    expect(ins.payload).toEqual([{ domain: 'c.shopifypreview.com', project_id: 'p1' }]);
+  });
+  it('setStages: almeno uno stage, indirizzi validi, stage già usato da un altro sito', async () => {
+    const { fake, api } = setup();
+    const empty = await api.setStages('p1', ['a.com'], ['  ']);
+    expect(empty.ok === false && empty.error.message).toBe('Serve almeno uno stage.');
+    const bad = await api.setStages('p1', ['a.com'], ['non è un indirizzo']);
+    expect(bad.ok === false && bad.error.message).toBe('Indirizzo non valido: non è un indirizzo');
+    fake.on('project_domains:insert', () => ({ data: null, error: { code: '23505', message: 'duplicate key' }, status: 409 }));
+    const dup = await api.setStages('p1', ['a.com'], ['a.com', 'b.com']);
+    expect(dup.ok === false && dup.error.message).toBe('Uno di questi stage è già collegato a un altro sito.');
+    expect(fake.calls.some(c => c.table === 'project_domains' && c.op === 'delete')).toBe(false); // niente rimosso se l'aggiunta fallisce
+  });
 });

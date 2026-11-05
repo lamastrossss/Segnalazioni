@@ -3,6 +3,7 @@ import type { Anchor, ArchiveStatus, Attachment, Issue, IssueDetail, IssueStatus
 import { mimeOf, type PreparedImage } from './media';
 import { classifyError, fail, ok, type Result } from './errors';
 import { probeSupabase } from './supabase';
+import { normalizeStage } from './stage-url';
 
 export interface NewIssue {
   project_id: string; page_path: string; page_url: string; viewport_class: ViewportClass;
@@ -108,6 +109,41 @@ export function createApi(client: SupabaseClient) {
       const clean = name.trim();
       if (!clean) return fail('unknown', 'Il nome non può essere vuoto.');
       return updateOne('projects', projectId, { name: clean });
+    },
+
+    /** Elimina il sito in modo recuperabile: sparisce da board e tool, lo stage si libera. */
+    async deleteProject(projectId: string): Promise<Result<void>> {
+      return run(client.rpc('delete_project', { p_id: projectId }), () => undefined);
+    },
+
+    /** Sostituisce gli stage collegati al sito. inputs: URL completi o domini. Restituisce i domini salvati. */
+    async setStages(projectId: string, current: string[], inputs: string[]): Promise<Result<string[]>> {
+      const next: string[] = [];
+      for (const raw of inputs) {
+        if (!raw.trim()) continue;
+        const d = normalizeStage(raw);
+        if (!d) return fail('unknown', `Indirizzo non valido: ${raw.trim()}`);
+        if (!next.includes(d)) next.push(d);
+      }
+      if (!next.length) return fail('unknown', 'Serve almeno uno stage.');
+      const toAdd = next.filter(d => !current.includes(d));
+      const toRemove = current.filter(d => !next.includes(d));
+      try {
+        if (toAdd.length) {
+          const { error, status } = await client.from('project_domains').insert(toAdd.map(domain => ({ domain, project_id: projectId })));
+          if (error) {
+            if ((error as { code?: string }).code === '23505') return fail('unknown', 'Uno di questi stage è già collegato a un altro sito.');
+            return asError({ ...(error as object), status });
+          }
+        }
+        if (toRemove.length) {
+          const { error, status } = await client.from('project_domains').delete().eq('project_id', projectId).in('domain', toRemove);
+          if (error) return asError({ ...(error as object), status });
+        }
+      } catch (e) {
+        return asError(e);
+      }
+      return ok(next);
     },
 
     async linkDomain(projectId: string, domain: string): Promise<Result<void>> {

@@ -33,7 +33,7 @@ const filters: IssueFilters = {
 const filterBar = el('div', { class: 'filters' });
 const list = el('ul', { class: 'issues' });
 main.append(el('p', {}, [el('a', { text: '← Tutti i siti', attrs: { href: './index.html' } })]));
-renderSiteHeader(main, { project, api, onRenamed: name => { document.title = `${name} · Stage Review`; } });
+renderSiteHeader(main, { project, api, onRenamed: name => { document.title = `${name} · Stage Review`; }, onDeleted: () => { location.href = './index.html'; } });
 main.append(filterBar, list);
 
 const detail = renderDetail(document.body, {

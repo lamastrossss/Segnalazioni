@@ -22,8 +22,9 @@ app.append(el('header', { class: 'top' }, [
   el('button', { class: 'btn ghost', text: 'Esci' }),
 ]));
 app.append(el('p', {}, [el('a', { text: '← Tutti i siti', attrs: { href: '#' } })]));
-const api = { renameProject: async () => ({ ok: true as const, value: undefined }) } as unknown as Api;
-renderSiteHeader(app, { project: { id: 'p1', name: 'i1pw9r-dv.myshopify.com', archive_doc_url: null, domains: ['i1pw9r-dv.myshopify.com'] }, api, onRenamed: () => {} });
+const api = { renameProject: async () => ({ ok: true as const, value: undefined }), deleteProject: async () => ({ ok: true as const, value: undefined }),
+  setStages: async (_p: string, _c: string[], i: string[]) => ({ ok: true as const, value: i.filter(Boolean).map(x => x.replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase()) }) } as unknown as Api;
+renderSiteHeader(app, { project: { id: 'p1', name: 'i1pw9r-dv.myshopify.com', archive_doc_url: null, domains: ['i1pw9r-dv.myshopify.com'] }, api, onRenamed: () => {}, onDeleted: () => { alert('eliminato'); } });
 const sel = (label: string, opts: string[]) => el('select', {}, [el('option', { text: label }), ...opts.map(o => el('option', { text: o }))]);
 app.append(el('div', { class: 'filters' }, [
   sel('Tutte le pagine', ['/']), sel('Tutte le viewport', ['Mobile', 'Tablet', 'Desktop']),
