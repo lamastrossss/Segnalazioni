@@ -54,6 +54,7 @@ class Spreadsheet {
 interface Row { [k: string]: any }
 function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: { failIssues?: boolean; failSign?: boolean; locked?: boolean; failPatch?: boolean } = {}) {
   const triggers: { fn: string; source: string }[] = [];
+  const trashed: string[] = [];
   const props = new Map<string, string>([['SUPABASE_URL', 'https://sb.test'], ['SERVICE_ROLE_KEY', 'service'], ['FOLDER_ID', 'folder']]);
   const sheets = new Map<string, Spreadsheet>();
   const events: string[] = [];
@@ -99,6 +100,8 @@ function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: 
       getProperty: (k: string) => props.get(k) ?? null,
       setProperty: (k: string, v: string) => { if (k === 'SHEET_WATERMARK_V2') events.push('wm'); props.set(k, v); },
       getProperties: () => Object.fromEntries(props),
+      getKeys: () => [...props.keys()],
+      deleteProperty: (k: string) => { props.delete(k); },
     }) },
     UrlFetchApp: { fetch },
     SpreadsheetApp: {
@@ -116,9 +119,10 @@ function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: 
         return b;
       },
     },
-    DriveApp: { getFileById: () => ({ moveTo: () => {} }), getFolderById: () => ({}) },
+    DriveApp: { getFileById: (id: string) => ({ moveTo: () => {}, setTrashed: (t: boolean) => { if (t) trashed.push(id); } }), getFolderById: () => ({}) },
     ScriptApp: {
-      getProjectTriggers: () => triggers.map(t => ({ getHandlerFunction: () => t.fn, getTriggerSourceId: () => t.source })),
+      getProjectTriggers: () => triggers.map(t => ({ getHandlerFunction: () => t.fn, getTriggerSourceId: () => t.source, _t: t })),
+      deleteTrigger: (x: any) => { triggers.splice(triggers.indexOf(x._t), 1); },
       newTrigger: (fn: string) => ({ forSpreadsheet: (ss: Spreadsheet) => ({ onEdit: () => ({ create: () => { triggers.push({ fn, source: ss.getId() }); } }) }) }),
     },
     LockService: { getScriptLock: () => ({ tryLock: () => !opts.locked, releaseLock: () => {} }) },
@@ -130,7 +134,7 @@ function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: 
   vm.runInContext(readFileSync(join(root, 'sync.js'), 'utf8'), ctx);
   const edit = (ss: Spreadsheet, row: number, col: number, nr = 1, nc = 1) =>
     (ctx.onStatoEdit as (e: unknown) => void)({ range: ss.getSheets()[0].getRange(row, col, nr, nc) });
-  return { run: () => (ctx.syncArchive as () => void)(), sheets, props, log, db, events, triggers, edit };
+  return { run: () => (ctx.syncArchive as () => void)(), reset: () => (ctx.ripartiDaZero as () => void)(), sheets, props, log, db, events, triggers, edit, trashed };
 }
 
 const profiles = [{ id: 'u1', name: 'Alessandra' }, { id: 'u2', name: 'Marco' }];
@@ -351,5 +355,23 @@ describe('archivio su Fogli Google', () => {
     env.run();                                     // nessuna segnalazione nuova o modificata
     expect(env.triggers).toEqual([{ fn: 'onStatoEdit', source: ss.getId() }]);
     expect(ss.getSheets()[0].validation.get('2,2')).toBeDefined();
+  });
+
+  it('ripartiDaZero: fogli e vecchi Doc nel Cestino, stato azzerato, impostazioni e timer intatti', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] });
+    env.run();
+    const ss = [...env.sheets.values()][0];
+    env.props.set('doc:p1', 'vecchioDoc'); env.props.set('blk:i1', '{}'); env.props.set('WATERMARK', 'x'); env.props.set('SHEET_WATERMARK', 'x');
+    env.triggers.push({ fn: 'syncArchive', source: 'script' });
+    env.reset();
+    expect(env.trashed.sort()).toEqual([ss.getId(), 'vecchioDoc'].sort());
+    expect([...env.props.keys()].sort()).toEqual(['FOLDER_ID', 'SERVICE_ROLE_KEY', 'SUPABASE_URL']);
+    expect(env.triggers).toEqual([{ fn: 'syncArchive', source: 'script' }]);
+    env.db.issues.length = 0;
+    env.db.issues.push(issue({ id: 'n1', number: 1, body: 'prima vera' }));
+    env.run();
+    expect(env.sheets.size).toBe(2);
+    const fresh = [...env.sheets.values()][1].getSheets()[0];
+    expect(fresh.rows.slice(1).map(r => r[12])).toEqual(['n1']);
   });
 });

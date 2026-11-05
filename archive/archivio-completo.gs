@@ -125,6 +125,26 @@ function installTrigger() {
   ScriptApp.newTrigger('syncArchive').timeBased().everyMinutes(10).create();
 }
 
+/**
+ * Da eseguire a mano per ripartire da zero (dopo aver svuotato il database con ripartenza.sql):
+ * sposta nel Cestino di Drive i fogli e i vecchi Doc dell'archivio, toglie gli ascoltatori dello Stato
+ * e azzera lo stato della sincronizzazione. Le impostazioni (URL, chiave, cartella) e il timer restano.
+ */
+function ripartiDaZero() {
+  var props = PropertiesService.getScriptProperties();
+  var keep = { SUPABASE_URL: 1, SERVICE_ROLE_KEY: 1, FOLDER_ID: 1 };
+  props.getKeys().forEach(function (k) {
+    if (keep[k]) return;
+    if (k.indexOf('sheet:') === 0 || k.indexOf('doc:') === 0) {
+      try { DriveApp.getFileById(props.getProperty(k)).setTrashed(true); } catch (e) { /* già cancellato */ }
+    }
+    props.deleteProperty(k);
+  });
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'onStatoEdit') ScriptApp.deleteTrigger(t);
+  });
+}
+
 /** Entry point del trigger. */
 function syncArchive() {
   var lock = LockService.getScriptLock();
