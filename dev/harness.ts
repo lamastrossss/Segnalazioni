@@ -49,7 +49,7 @@ const api = {
   archiveStatus: () => ok({ last_run_at: null, last_ok_at: null, last_error: null }), totalUsageBytes: () => ok(0),
 } as unknown as Api;
 
-const auth = { current: async () => me, signIn: async () => ({ ok: true as const, value: me }), signUp: async () => ({ ok: true as const, value: 'check-email' as const }), onChange: () => () => {} };
+const auth = { current: async () => me, signIn: async () => ({ ok: true as const, value: me }), changePassword: async () => ({ ok: true as const, value: undefined }), onChange: () => () => {} };
 const live = {
   subscribe: () => () => {},
   join: (_p: string, _m: unknown, onSync: (o: any[]) => void) => { setTimeout(() => onSync([{ userId: 'u2', name: marco.name, color: marco.color, page_path: path, viewport_class: 'desktop' }]), 300); return { update() {}, leave() {} }; },

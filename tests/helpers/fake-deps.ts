@@ -38,7 +38,7 @@ export function fakeAuth(me: Profile | null = ME): Auth {
   return {
     current: vi.fn(async () => me),
     signIn: vi.fn(async () => ({ ok: true as const, value: ME })),
-    signUp: vi.fn(async () => ({ ok: true as const, value: 'check-email' as const })),
+    changePassword: vi.fn(async () => ({ ok: true as const, value: undefined })),
     onChange: vi.fn(() => () => {}),
   };
 }

@@ -59,6 +59,10 @@ export function createFakeSupabase() {
         if (!r.error) { session = { user: { id: 'u1', email } }; authListeners.forEach(l => l('SIGNED_IN', session)); }
         return { data: { session }, error: r.error };
       },
+      updateUser: async (args: unknown) => {
+        const h = handlers.get('auth:updateUser');
+        return h ? h({ table: 'auth', op: 'update', filters: [], payload: args }) : { data: {}, error: null };
+      },
       signUp: async (args: unknown) => {
         const h = handlers.get('auth:signUp');
         return h ? h({ table: 'auth', op: 'insert', filters: [], payload: args }) : { data: {}, error: null };

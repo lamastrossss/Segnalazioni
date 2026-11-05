@@ -23,16 +23,11 @@ Funziona su Chrome desktop. Tutto gratuito: GitHub Pages + Supabase (piano free)
    (le migrazioni 001-003 in un file). Poi, in una **query separata**, esegui
    `supabase/tests/rls-check.sql`: deve rispondere **RLS OK**. Non unirli: il controllo
    annulla tutto ciò che è nella stessa esecuzione.
-2. **Auth.** Supabase → *Authentication → Sign In / Providers → Email*: lascia attivo
-   *Confirm email*. In *URL Configuration* imposta *Site URL* a
-   `https://lamastrossss.github.io/Segnalazioni/`.
-   Il database accetta solo email @thewavestudio.it **confermate**. Con il servizio email
-   gratuito di Supabase le email di conferma potrebbero arrivare solo ai membri del team
-   Supabase. Se a un collega non arriva:
-   - **più semplice:** *Authentication → Users → Add user → Create new user*, con la sua email,
-     una password provvisoria e *Auto Confirm User* spuntato. Poi gli comunichi la password;
-   - **oppure** configura un SMTP tuo in *Authentication → Emails → SMTP Settings* (es. Gmail
-     con password per app, o un servizio come Resend con piano gratuito).
+2. **Accessi (niente registrazione libera).** Supabase → *Authentication → Sign In / Providers*:
+   disattiva *Allow new users to sign up*. Gli account li crea l'amministratore:
+   *Authentication → Users → Add user → Create new user*, con email @thewavestudio.it,
+   una password provvisoria e *Auto Confirm User* spuntato. Ognuno poi la cambia dalla
+   board con **Cambia password**.
 3. **Pubblicazione.** Su GitHub, nel repository `Segnalazioni`: *Settings → Pages → Source: GitHub Actions*.
    Ogni push su `main` esegue i test e pubblica (`.github/workflows/pages.yml`).
 4. **Pulsante.** Apri la pagina di installazione e trascina **Revisiona** nella barra dei preferiti.

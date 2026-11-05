@@ -1,7 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Profile } from './types';
 import { classifyError, fail, ok, type Result } from './errors';
-import { CONFIG } from '../config';
 
 export function isStudioEmail(email: string): boolean {
   return /@thewavestudio\.it$/i.test(email.trim());
@@ -37,17 +36,17 @@ export function createAuth(client: SupabaseClient) {
       }
     },
 
-    async signUp(email: string, password: string, name: string): Promise<Result<'check-email'>> {
-      if (!isStudioEmail(email)) return fail('forbidden', 'Usa la tua email @thewavestudio.it.');
+    /** Cambio password dell'utente collegato (gli account li crea l'amministratore con una password provvisoria). */
+    async changePassword(password: string, confirm: string): Promise<Result<void>> {
       if (password.length < MIN_PASSWORD) return fail('unknown', `La password deve avere almeno ${MIN_PASSWORD} caratteri.`);
-      if (!name.trim()) return fail('unknown', 'Scrivi il tuo nome.');
+      if (password !== confirm) return fail('unknown', 'Le due password non coincidono.');
       try {
-        const { error } = await client.auth.signUp({
-          email: email.trim(), password,
-          options: { data: { name: name.trim() }, emailRedirectTo: CONFIG.publicBaseUrl },
-        });
-        if (error) return { ok: false, error: await classifyError(error) };
-        return ok('check-email');
+        const { error } = await client.auth.updateUser({ password });
+        if (error) {
+          if (/different from the old password/i.test(error.message)) return fail('unknown', 'La nuova password deve essere diversa da quella attuale.');
+          return { ok: false, error: await classifyError(error) };
+        }
+        return ok(undefined);
       } catch (e) {
         return { ok: false, error: await classifyError(e) };
       }
