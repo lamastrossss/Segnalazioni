@@ -24,7 +24,7 @@ async function renderStatus() {
   if (archive.ok) {
     const h = archiveHealth(archive.value, new Date());
     const when = archive.value.last_ok_at ? new Date(archive.value.last_ok_at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : null;
-    const label = when ? `Ultimo archivio: ${when}` : 'Archivio Google Docs non ancora attivo';
+    const label = when ? `Ultimo archivio: ${when}` : 'Archivio su Fogli Google non ancora attivo';
     parts.push(el('span', { class: `archive ${h}`, text: h === 'error' ? `${label} · errore` : label,
       attrs: archive.value.last_error ? { title: archive.value.last_error } : {} }));
   }
@@ -52,7 +52,7 @@ async function renderProjects() {
     el('p', { class: 'muted', text: p.last_activity ? `Ultima attività: ${formatDate(p.last_activity)}` : 'Nessuna attività' }),
     el('div', { class: 'chips' }, [
       el('a', { class: 'btn', text: 'Apri', attrs: { href: `./site.html?id=${encodeURIComponent(p.id)}` } }),
-      p.archive_doc_url ? el('a', { class: 'btn ghost', text: 'Archivio (Google Doc)', attrs: { href: p.archive_doc_url, target: '_blank', rel: 'noopener' } }) : '',
+      p.archive_doc_url ? el('a', { class: 'btn ghost', text: 'Archivio (Fogli Google)', attrs: { href: p.archive_doc_url, target: '_blank', rel: 'noopener' } }) : '',
     ]),
   ])));
 }

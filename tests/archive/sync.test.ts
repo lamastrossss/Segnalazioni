@@ -3,68 +3,60 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import vm from 'node:vm';
 
-// ---- Google Apps Script simulato (solo ciò che usa sync.js) ----
-class P {
-  text: string; heading = 'NORMAL'; images: { w: number; h: number }[] = []; hr = false; link: string | null = null; bold = false;
-  constructor(t: string) { this.text = t; }
-  // Come in Apps Script: Paragraph.setText non restituisce niente (non si può concatenare)
-  setText(t: string): void { this.text = t; }
-  getText() { return this.text; }
-  setHeading(h: string) { this.heading = h; return this; }
-  appendInlineImage(blob: { bad?: boolean }) {
-    if (blob.bad) throw new Error('Invalid image data');
-    const img = { w: 1000, h: 500, getWidth() { return this.w; }, getHeight() { return this.h; }, setWidth(v: number) { this.w = v; }, setHeight(v: number) { this.h = v; } };
-    this.images.push(img); return img;
-  }
-  appendHorizontalRule() { this.hr = true; }
-  editAsText() { return { setBold: () => { this.bold = true; }, setLinkUrl: (_s: number, _e: number, u: string) => { this.link = u; } }; }
-  asParagraph() { return this; }
-}
-let saveHook: (id: string) => void = () => {};
-class Doc {
-  children: P[] = [new P('')];
-  named = new Map<string, P[][]>();
-  constructor(public id: string, public name: string) {}
-  getId() { return this.id; }
-  getName() { return this.name; }
+// ---- Fogli Google simulato (solo ciò che usa sync.js, con i ritorni reali di Apps Script) ----
+type Cell = string | number;
+class Sheet {
+  rows: Cell[][] = [];
+  rich = new Map<string, { text: string; links: { start: number; end: number; url: string }[] }>();
+  name = 'Foglio1'; frozen = 0; hidden: number[] = []; heights = new Map<number, number>();
   setName(n: string) { this.name = n; return this; }
-  getUrl() { return `https://docs.google.com/document/d/${this.id}/edit`; }
-  saveAndClose() { saveHook(this.id); }
-  getBody() {
-    const c = this.children;
+  getLastRow() { return this.rows.length; }
+  setFrozenRows(n: number) { this.frozen = n; }
+  hideColumns(c: number) { this.hidden.push(c); }
+  setColumnWidth() { return this; }
+  setRowHeight(r: number, h: number) { this.heights.set(r, h); return this; }
+  deleteRow(r: number) { this.rows.splice(r - 1, 1); return this; }
+  getRange(r: number, c: number, nr = 1, nc = 1) {
+    const sheet = this;
     return {
-      getChild: (i: number) => c[i],
-      getChildIndex: (e: P) => c.indexOf(e),
-      appendParagraph: (t: string) => { const p = new P(t); c.push(p); return p; },
-      insertParagraph: (i: number, t: string) => { const p = new P(t); c.splice(i, 0, p); return p; },
+      getValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => sheet.rows[r - 1 + i]?.[c - 1 + j] ?? '')),
+      setValues: (v: Cell[][]) => {
+        if (v.length !== nr || v.some(row => row.length !== nc)) throw new Error('dimensioni non corrispondenti');
+        v.forEach((row, i) => { const target = (sheet.rows[r - 1 + i] ??= []); row.forEach((x, j) => { target[c - 1 + j] = x; }); });
+        for (let k = 0; k < sheet.rows.length; k++) sheet.rows[k] ??= [];
+        return undefined; // come Apps Script: niente catene
+      },
+      setRichTextValue: (rt: any) => { sheet.rich.set(`${r},${c}`, rt); return undefined; },
+      setFontWeight: () => undefined,
     };
   }
-  getNamedRanges(name: string) {
-    return (this.named.get(name) ?? []).map(els => ({
-      getRange: () => ({ getRangeElements: () => els.map(e => ({ getElement: () => e })) }),
-      remove: () => { this.named.set(name, (this.named.get(name) ?? []).filter(x => x !== els)); },
-    }));
-  }
-  newRange() { const els: P[] = []; const b = { addElement: (e: P) => { els.push(e); return b; }, build: () => els }; return b; }
-  addNamedRange(name: string, els: P[]) { this.named.set(name, [...(this.named.get(name) ?? []), els]); }
-  texts() { return this.children.map(p => p.text); }
+}
+class Spreadsheet {
+  sheets = [new Sheet()];
+  constructor(public id: string, public name: string) {}
+  getId() { return this.id; }
+  getUrl() { return `https://docs.google.com/spreadsheets/d/${this.id}/edit`; }
+  getName() { return this.name; }
+  rename(n: string) { this.name = n; }
+  getSheets() { return this.sheets; }
 }
 
 interface Row { [k: string]: any }
-function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: { failIssues?: boolean; badImage?: string; locked?: boolean } = {}) {
-  const events: string[] = [];
+function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: { failIssues?: boolean; failSign?: boolean; locked?: boolean } = {}) {
   const props = new Map<string, string>([['SUPABASE_URL', 'https://sb.test'], ['SERVICE_ROLE_KEY', 'service'], ['FOLDER_ID', 'folder']]);
-  const docs = new Map<string, Doc>();
+  const sheets = new Map<string, Spreadsheet>();
+  const events: string[] = [];
   const log: { method: string; path: string; body?: any }[] = [];
   let n = 0;
-  const json = (v: unknown, code = 200) => ({ getResponseCode: () => code, getContentText: () => (v === null ? '' : JSON.stringify(v)), getBlob: () => ({}) });
+  const json = (v: unknown, code = 200) => ({ getResponseCode: () => code, getContentText: () => (v === null ? '' : JSON.stringify(v)) });
   const fetch = (url: string, o: { method?: string; payload?: string } = {}) => {
     const u = new URL(url);
     const method = o.method ?? 'get';
     const body = o.payload ? JSON.parse(o.payload) : undefined;
     log.push({ method, path: u.pathname, body });
-    if (u.pathname.startsWith('/storage/')) {
-      return { getResponseCode: () => (opts.badImage && u.pathname.includes(opts.badImage) ? 404 : 200), getContentText: () => '', getBlob: () => ({}) };
+    if (u.pathname === '/storage/v1/object/sign/media') {
+      if (opts.failSign) return json({ message: 'no' }, 500);
+      return json(body.paths.map((p: string) => ({ path: p, signedURL: `/object/sign/media/${p}?token=t`, error: null })));
     }
     if (u.pathname === '/rest/v1/profiles') return json(db.profiles);
     if (u.pathname === '/rest/v1/projects' && method === 'get') return json(db.projects);
@@ -78,38 +70,41 @@ function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: 
       const lt = u.searchParams.get('updated_at');
       const m = /updated_at\.gt\.([^,]+),and\(updated_at\.eq\.([^,]+),id\.gt\.([^)]+)\)/.exec(u.searchParams.get('or')!)!;
       const [t, id] = [m[1], m[3]];
-      const rows = db.issues
+      return json(db.issues
         .filter(i => i.updated_at > t || (i.updated_at === t && i.id > id))
         .filter(i => !lt || new Date(i.updated_at) < new Date(lt.replace('lt.', '')))
         .sort((a, b) => a.updated_at.localeCompare(b.updated_at) || a.id.localeCompare(b.id))
-        .slice(0, Number(u.searchParams.get('limit')));
-      return json(rows);
+        .slice(0, Number(u.searchParams.get('limit'))));
     }
     throw new Error('rotta non simulata ' + url);
   };
   const ctx: Record<string, unknown> = {
     PropertiesService: { getScriptProperties: () => ({
       getProperty: (k: string) => props.get(k) ?? null,
-      setProperty: (k: string, v: string) => { if (k === 'WATERMARK') events.push('wm'); props.set(k, v); },
+      setProperty: (k: string, v: string) => { if (k === 'SHEET_WATERMARK') events.push('wm'); props.set(k, v); },
       getProperties: () => Object.fromEntries(props),
     }) },
     UrlFetchApp: { fetch },
-    DocumentApp: {
-      create: (name: string) => { const d = new Doc(`doc${++n}`, name); docs.set(d.id, d); return d; },
-      openById: (id: string) => { const d = docs.get(id); if (!d) throw new Error('no doc'); return d; },
-      ParagraphHeading: { TITLE: 'TITLE', HEADING2: 'HEADING2', NORMAL: 'NORMAL' },
+    SpreadsheetApp: {
+      create: (name: string) => { const s = new Spreadsheet(`sheet${++n}`, name); sheets.set(s.id, s); return s; },
+      openById: (id: string) => { const s = sheets.get(id); if (!s) throw new Error('no sheet'); return s; },
+      flush: () => { events.push('flush'); },
+      newRichTextValue: () => {
+        const rt: any = { text: '', links: [] };
+        const b = { setText: (t: string) => { rt.text = t; return b; }, setLinkUrl: (s: number, e: number, url: string) => { rt.links.push({ start: s, end: e, url }); return b; }, build: () => rt };
+        return b;
+      },
     },
     DriveApp: { getFileById: () => ({ moveTo: () => {} }), getFolderById: () => ({}) },
     ScriptApp: {},
-    LockService: { getScriptLock: () => ({ tryLock: () => !opts.locked, releaseLock: () => { events.push('unlock'); } }) },
+    LockService: { getScriptLock: () => ({ tryLock: () => !opts.locked, releaseLock: () => {} }) },
     Intl, Date, JSON, Math, Object, String, encodeURIComponent, Error, Array,
   };
-  saveHook = id => events.push('save:' + id);
   vm.createContext(ctx);
   const root = join(__dirname, '..', '..', 'archive');
   vm.runInContext(readFileSync(join(root, 'format.js'), 'utf8'), ctx);
   vm.runInContext(readFileSync(join(root, 'sync.js'), 'utf8'), ctx);
-  return { run: () => (ctx.syncArchive as () => void)(), docs, props, log, db, events };
+  return { run: () => (ctx.syncArchive as () => void)(), sheets, props, log, db, events };
 }
 
 const profiles = [{ id: 'u1', name: 'Alessandra' }, { id: 'u2', name: 'Marco' }];
@@ -119,119 +114,120 @@ const issue = (over: Row = {}): Row => ({
   created_at: '2026-11-04T09:00:00.000001+00:00', updated_at: '2026-11-04T09:00:00.000001+00:00',
   deleted_at: null, deleted_by: null, plus_ones: [], attachments: [], replies: [], ...over,
 });
-const reply = (id: string, over: Row = {}) => ({ id, issue_id: 'i1', author_id: 'u2', body: `risposta ${id}`, created_at: `2026-11-04T09:3${id.slice(-1)}:00+00:00`, deleted_at: null, attachments: [], ...over });
+const sheetOf = (env: ReturnType<typeof makeEnv>) => [...env.sheets.values()][0].getSheets()[0];
+const ids = (s: Sheet) => s.rows.slice(1).map(r => r[13]);
 
-describe('sincronizzazione archivio', () => {
-  it('crea il Doc del sito con il blocco completo e salva lo stato', () => {
-    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue({ replies: [reply('r1')] })] });
-    env.run();
-    const doc = [...env.docs.values()][0];
-    expect(doc.name).toBe('Stage Review — Rica');
-    expect(env.db.projects[0].archive_doc_url).toBe(doc.getUrl());
-    const t = doc.texts();
-    expect(t).toContain('#1 · /p · Mobile 375');
-    expect(t.find(x => x.startsWith('Alessandra ·'))).toContain('Stato: Aperta');
-    expect(t).toContain('Titolo troppo vicino');
-    expect(t).toContain('↳ Marco · 04/11/2026 10:31');
-    expect(doc.children.some(p => p.images.length === 1 && p.images[0].w === 480 && p.images[0].h === 240)).toBe(true);
-    expect((env.db as any).status.last_error).toBeNull();
-    expect((env.db as any).status.last_ok_at).toBeTruthy();
-    expect(env.props.get('WATERMARK')).toBe('2026-11-04T09:00:00.000001+00:00|i1');
-  });
-
-  it('un secondo giro senza novità non crea doppioni', () => {
-    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] });
-    env.run();
-    const before = [...env.docs.values()][0].children.length;
-    env.run();
-    expect([...env.docs.values()][0].children.length).toBe(before);
-    expect(env.docs.size).toBe(1);
-  });
-
-  it('aggiorna stato e aggiunge risposte nel blocco giusto, anche con altro testo intorno', () => {
+describe('archivio su Fogli Google', () => {
+  it('crea il foglio del sito con intestazione e una riga per segnalazione', () => {
     const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue(), issue({ id: 'i2', number: 2, body: 'Seconda', screenshot_path: null })] });
     env.run();
-    const doc = [...env.docs.values()][0];
-    doc.getBody().appendParagraph('Nota scritta a mano');
-    Object.assign(env.db.issues[0], { status: 'resolved', updated_at: '2026-11-04T11:00:00+00:00', replies: [reply('r1')] });
-    env.run();
-    const t = doc.texts();
-    expect(t.filter(x => x === '#1 · /p · Mobile 375')).toHaveLength(1);
-    expect(t.find(x => x.startsWith('Alessandra ·') && x.includes('Stato: Risolta'))).toBeTruthy();
-    const replyAt = t.indexOf('↳ Marco · 04/11/2026 10:31');
-    expect(replyAt).toBeGreaterThan(t.indexOf('Titolo troppo vicino'));
-    expect(replyAt).toBeLessThan(t.indexOf('#2 · /p · Mobile 375'));
-    expect(t.at(-1)).toBe('Nota scritta a mano');
+    const ss = [...env.sheets.values()][0];
+    expect(ss.getName()).toBe('Stage Review — Rica');
+    expect(env.db.projects[0].archive_doc_url).toBe(ss.getUrl());
+    const s = ss.getSheets()[0];
+    expect(s.name).toBe('Segnalazioni');
+    expect(s.rows[0][0]).toBe('#');
+    expect(s.frozen).toBe(1);
+    expect(s.hidden).toContain(14);
+    expect(ids(s)).toEqual(['i1', 'i2']);
+    expect(s.rows[1][10]).toBe('=IMAGE("https://sb.test/storage/v1/object/sign/media/p1/i1/screenshot.jpg?token=t")');
+    expect(s.heights.get(2)).toBe(90);
+    expect((env.db as any).status.last_error).toBeNull();
   });
 
-  it('marca le segnalazioni e le risposte eliminate senza toglierle', () => {
-    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue({ replies: [reply('r1')] })] });
+  it('link firmati validi 10 anni, tutti in una chiamata per segnalazione', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles,
+      issues: [issue({ attachments: [{ id: 'a1', path: 'p1/i1/a1.jpg', reply_id: null, created_at: '1', deleted_at: null }] })] });
     env.run();
-    Object.assign(env.db.issues[0], { deleted_at: '2026-11-04T10:00:00+00:00', deleted_by: 'u1', updated_at: '2026-11-04T12:00:00+00:00', replies: [reply('r1', { deleted_at: 'x' })] });
-    env.run();
-    const t = [...env.docs.values()][0].texts();
-    expect(t.find(x => x.includes('Eliminata il 04/11/2026 11:00 da Alessandra'))).toBeTruthy();
-    expect(t).toContain('↳ Marco · 04/11/2026 10:31 · eliminata');
-    expect(t).toContain('Titolo troppo vicino');
+    const signs = env.log.filter(l => l.path === '/storage/v1/object/sign/media');
+    expect(signs).toHaveLength(1);
+    expect(signs[0].body).toEqual({ expiresIn: 315360000, paths: ['p1/i1/screenshot.jpg', 'p1/i1/a1.jpg'] });
+    const rt = sheetOf(env).rich.get('2,12')!;
+    expect(rt.text).toBe('Immagine 1');
+    // RichTextValueBuilder.setLinkUrl: fine esclusiva ('Immagine 1' = 10 caratteri)
+    expect(rt.links).toEqual([{ start: 0, end: 10, url: 'https://sb.test/storage/v1/object/sign/media/p1/i1/a1.jpg?token=t' }]);
   });
 
-  it('un Doc per sito', () => {
+  it('aggiorna la riga al suo posto senza doppioni', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue(), issue({ id: 'i2', number: 2 })] });
+    env.run();
+    Object.assign(env.db.issues[0], { status: 'resolved', updated_at: '2026-11-04T11:00:00+00:00',
+      replies: [{ id: 'r1', author_id: 'u2', body: 'Fatto', created_at: '2026-11-04T09:30:00Z', deleted_at: null }] });
+    env.run();
+    const s = sheetOf(env);
+    expect(ids(s)).toEqual(['i1', 'i2']);
+    expect(s.rows[1][1]).toBe('Risolta');
+    expect(s.rows[1][8]).toBe('Marco · 04/11/2026 10:30: Fatto');
+  });
+
+  it('una segnalazione eliminata sparisce dal foglio', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue(), issue({ id: 'i2', number: 2 })] });
+    env.run();
+    Object.assign(env.db.issues[0], { deleted_at: '2026-11-04T10:00:00+00:00', deleted_by: 'u1', updated_at: '2026-11-04T12:00:00+00:00' });
+    env.run();
+    expect(ids(sheetOf(env))).toEqual(['i2']);
+  });
+
+  it('una segnalazione già eliminata al primo giro non viene scritta', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue({ deleted_at: 'x' })] });
+    env.run();
+    expect(env.sheets.size).toBe(0);
+  });
+
+  it('un file per sito, rinominato quando cambia il nome del sito', () => {
     const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }, { id: 'p2', name: 'Altro' }], profiles,
       issues: [issue(), issue({ id: 'i9', project_id: 'p2', updated_at: '2026-11-04T09:10:00+00:00' })] });
     env.run();
-    expect([...env.docs.values()].map(d => d.name).sort()).toEqual(['Stage Review — Altro', 'Stage Review — Rica']);
+    expect([...env.sheets.values()].map(s => s.getName()).sort()).toEqual(['Stage Review — Altro', 'Stage Review — Rica']);
+    env.db.projects[0].name = 'Rica Haircare';
+    Object.assign(env.db.issues[0], { status: 'resolved', updated_at: '2026-11-04T11:00:00+00:00' });
+    env.run();
+    expect(env.sheets.size).toBe(2);
+    expect([...env.sheets.values()].map(s => s.getName())).toContain('Stage Review — Rica Haircare');
   });
 
-  it('immagine non scaricabile → segnaposto, la segnalazione viene scritta', () => {
-    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] }, { badImage: 'screenshot' });
+  it('salva il foglio prima di far avanzare il segnaposto', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue(), issue({ id: 'i2', number: 2 })] });
     env.run();
-    const t = [...env.docs.values()][0].texts();
-    expect(t).toContain('[immagine non disponibile]');
-    expect(t).toContain('Titolo troppo vicino');
+    const wm = env.events.map((e, i) => [e, i] as const).filter(([e]) => e === 'wm');
+    expect(wm).toHaveLength(2);
+    for (const [, i] of wm) expect(env.events[i - 1]).toBe('flush');
+  });
+
+  it('se la firma dei link fallisce la riga viene scritta lo stesso, senza immagini', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] }, { failSign: true });
+    env.run();
+    const s = sheetOf(env);
+    expect(ids(s)).toEqual(['i1']);
+    expect(s.rows[1][9]).toBe('');
+  });
+
+  it('il testo degli utenti non diventa una formula', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue({ body: '=IMPORTXML("http://x","//a")' })] });
+    env.run();
+    expect(sheetOf(env).rows[1][4]).toBe('\'=IMPORTXML("http://x","//a")');
+  });
+
+  it('se un altro giro è in corso non fa niente', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] }, { locked: true });
+    env.run();
+    expect(env.sheets.size).toBe(0);
+  });
+
+  it('ignora le modifiche degli ultimi 30 secondi e le prende al giro dopo', () => {
+    const fresh = new Date().toISOString();
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue({ updated_at: fresh, created_at: fresh })] });
+    env.run();
+    expect(env.sheets.size).toBe(0);
+    env.db.issues[0].updated_at = '2026-11-04T09:00:00+00:00';
+    env.run();
+    expect(env.sheets.size).toBe(1);
   });
 
   it('errore di Supabase: stato con errore, segnaposto fermo, eccezione per l\'email di Google', () => {
     const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] }, { failIssues: true });
     expect(() => env.run()).toThrow(/boom/);
     expect((env.db as any).status.last_error).toMatch(/500/);
-    expect((env.db as any).status.last_ok_at).toBeUndefined();
-    expect(env.props.get('WATERMARK')).toBeUndefined();
-  });
-
-  it('salva il Doc prima di far avanzare il segnaposto', () => {
-    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue(), issue({ id: 'i2', number: 2 })] });
-    env.run();
-    const wm = env.events.map((e, i) => [e, i] as const).filter(([e]) => e === 'wm');
-    expect(wm).toHaveLength(2);
-    for (const [, i] of wm) expect(env.events[i - 1]).toMatch(/^save:/);
-  });
-
-  it('se un altro giro è in corso non fa niente (niente doppioni)', () => {
-    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] }, { locked: true });
-    env.run();
-    expect(env.docs.size).toBe(0);
-    expect(env.log.some(l => l.path === '/rest/v1/issues')).toBe(false);
-  });
-
-  it('ignora le modifiche degli ultimi 30 secondi (transazioni non ancora visibili) e le prende al giro dopo', () => {
-    const fresh = new Date().toISOString();
-    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue({ updated_at: fresh, created_at: fresh })] });
-    env.run();
-    expect(env.docs.size).toBe(0);
-    env.db.issues[0].updated_at = '2026-11-04T09:00:00+00:00';
-    env.run();
-    expect(env.docs.size).toBe(1);
-  });
-
-  it('se il sito viene rinominato, al giro dopo aggiorna nome e titolo del Doc', () => {
-    const env = makeEnv({ projects: [{ id: 'p1', name: 'i1pw9r-dv.myshopify.com' }], profiles, issues: [issue()] });
-    env.run();
-    const doc = [...env.docs.values()][0];
-    env.db.projects[0].name = 'Rica Haircare';
-    Object.assign(env.db.issues[0], { status: 'resolved', updated_at: '2026-11-04T11:00:00+00:00' });
-    env.run();
-    expect(env.docs.size).toBe(1);
-    expect(doc.name).toBe('Stage Review — Rica Haircare');
-    expect(doc.texts()[0]).toBe('Stage Review — Rica Haircare');
+    expect(env.props.get('SHEET_WATERMARK')).toBeUndefined();
   });
 });

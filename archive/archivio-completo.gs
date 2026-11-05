@@ -1,9 +1,13 @@
-// Stage Review — archivio Google Docs (format.js + sync.js in un unico file)
-/* Stage Review — archivio Google Docs: funzioni pure di formattazione.
- * Incollare in Apps Script come file "format.gs". Nessun import: funzioni globali. */
+// Stage Review — archivio su Fogli Google (format.js + sync.js in un unico file)
+/* Stage Review — archivio su Fogli Google: funzioni pure (una riga per segnalazione).
+ * Funzioni globali, nessun import: si incollano in Apps Script. */
 
 var SR_VIEWPORT = { mobile: 'Mobile', tablet: 'Tablet', desktop: 'Desktop' };
 var SR_STATUS = { open: 'Aperta', in_progress: 'In lavorazione', resolved: 'Risolta' };
+var SR_COLUMNS = ['#', 'Stato', 'Pagina', 'Viewport', 'Segnalazione', 'Autore', 'Data', '+1', 'Risposte',
+  'Screenshot', 'Anteprima', 'Allegati', 'Apri nel sito', 'ID'];
+var SR_COL = {};
+SR_COLUMNS.forEach(function (c, i) { SR_COL[c] = i + 1; });
 
 function srFormatDate(iso, tz) {
   var d = new Date(iso);
@@ -22,77 +26,93 @@ function srName(profilesById, id) {
 
 function srByCreated(a, b) { return String(a.created_at).localeCompare(String(b.created_at)); }
 
-function formatTitle(issue) {
-  return '#' + issue.number + ' · ' + issue.page_path + ' · ' + SR_VIEWPORT[issue.viewport_class] + ' ' + issue.viewport_width;
+/** Il testo scritto dagli utenti non deve mai diventare una formula del foglio. */
+function srSafeText(s) {
+  s = s == null ? '' : String(s);
+  return /^[=+\-@]/.test(s) ? "'" + s : s;
 }
 
-function formatMeta(issue, profilesById, tz) {
-  var plus = (issue.plus_ones || []).length;
-  var s = srName(profilesById, issue.author_id) + ' · ' + srFormatDate(issue.created_at, tz)
-    + ' · Stato: ' + SR_STATUS[issue.status] + ' · +1: ' + plus + ' · Apri nel sito: ' + issue.page_url;
-  if (issue.deleted_at) s += ' · Eliminata il ' + srFormatDate(issue.deleted_at, tz) + ' da ' + srName(profilesById, issue.deleted_by);
-  return s;
+function srQuote(s) { return '"' + String(s).replace(/"/g, '""') + '"'; }
+
+function srLink(url, label) {
+  return url ? '=HYPERLINK(' + srQuote(url) + ',' + srQuote(label) + ')' : '';
 }
 
-function formatReplyHeader(reply, profilesById, tz) {
-  return srName(profilesById, reply.author_id) + ' · ' + srFormatDate(reply.created_at, tz) + (reply.deleted_at ? ' · eliminata' : '');
+function srFocusUrl(issue) {
+  return String(issue.page_url).split('#')[0] + '#stage-review=' + issue.id;
 }
 
-/** Immagini della segnalazione (screenshot + allegati non di risposta), nell'ordine del Doc. */
-function srIssueImageIds(issue) {
-  var ids = issue.screenshot_path ? ['shot'] : [];
-  (issue.attachments || []).filter(function (a) { return !a.reply_id && !a.deleted_at; }).sort(srByCreated)
-    .forEach(function (a) { ids.push(a.id); });
-  return ids;
+function srAttachments(issue) {
+  return (issue.attachments || []).filter(function (a) { return !a.deleted_at; }).sort(srByCreated);
 }
 
-function planBlockUpdate(issue, known) {
-  var replies = (issue.replies || []).slice().sort(srByCreated);
-  if (!known) {
-    return { create: true, newImageIds: srIssueImageIds(issue), newReplyIds: replies.map(function (r) { return r.id; }), deletedReplyIds: [] };
-  }
-  var imgs = known.imgs || [], seenReplies = known.replies || [], marked = known.deleted || [];
-  var candidates = srIssueImageIds(issue);
-  (issue.attachments || []).filter(function (a) {
-    return a.reply_id && !a.deleted_at && seenReplies.indexOf(a.reply_id) >= 0;
-  }).sort(srByCreated).forEach(function (a) { candidates.push(a.id); });
-  return {
-    create: false,
-    newImageIds: candidates.filter(function (id) { return imgs.indexOf(id) < 0; }),
-    newReplyIds: replies.filter(function (r) { return seenReplies.indexOf(r.id) < 0; }).map(function (r) { return r.id; }),
-    deletedReplyIds: replies.filter(function (r) {
-      return r.deleted_at && seenReplies.indexOf(r.id) >= 0 && marked.indexOf(r.id) < 0;
-    }).map(function (r) { return r.id; }),
-  };
+/** Percorsi delle immagini da firmare: screenshot e allegati non eliminati. */
+function srImagePaths(issue) {
+  var paths = issue.screenshot_path ? [issue.screenshot_path] : [];
+  srAttachments(issue).forEach(function (a) { paths.push(a.path); });
+  return paths;
 }
 
-/** Stato da ricordare dopo aver scritto il blocco. */
-function nextKnown(issue) {
-  var imgs = issue.screenshot_path ? ['shot'] : [];
-  (issue.attachments || []).filter(function (a) { return !a.deleted_at; }).sort(srByCreated)
-    .forEach(function (a) { imgs.push(a.id); });
-  var replies = (issue.replies || []).slice().sort(srByCreated);
-  return {
-    imgs: imgs,
-    replies: replies.map(function (r) { return r.id; }),
-    deleted: replies.filter(function (r) { return r.deleted_at; }).map(function (r) { return r.id; }),
-  };
+/** Etichette degli allegati: "Immagine 1", "Risposta di Marco 1". */
+function srAttachmentLinks(issue, profilesById, urls) {
+  var replies = {};
+  (issue.replies || []).forEach(function (r) { replies[r.id] = r; });
+  var counters = {};
+  return srAttachments(issue).map(function (a) {
+    var who = a.reply_id && replies[a.reply_id] ? 'Risposta di ' + srName(profilesById, replies[a.reply_id].author_id) : 'Immagine';
+    counters[who] = (counters[who] || 0) + 1;
+    return { label: who + ' ' + counters[who], url: urls[a.path] || null };
+  });
+}
+
+function srRepliesText(issue, profilesById, tz) {
+  return (issue.replies || []).filter(function (r) { return !r.deleted_at; }).sort(srByCreated).map(function (r) {
+    return srName(profilesById, r.author_id) + ' · ' + srFormatDate(r.created_at, tz) + ': ' + r.body;
+  }).join('\n');
+}
+
+/**
+ * Riga del foglio per una segnalazione. urls: { <percorso storage>: link firmato }.
+ * Restituisce i valori (formule in sintassi inglese con le virgole, come vuole Apps Script)
+ * e i link degli allegati da mettere come testo con collegamenti nella colonna Allegati.
+ */
+function buildRow(issue, profilesById, tz, urls) {
+  var shot = issue.screenshot_path ? urls[issue.screenshot_path] || null : null;
+  var attachments = srAttachmentLinks(issue, profilesById, urls);
+  var values = [
+    issue.number,
+    SR_STATUS[issue.status] || issue.status,
+    srSafeText(issue.page_path),
+    SR_VIEWPORT[issue.viewport_class] + ' ' + issue.viewport_width,
+    srSafeText(issue.body),
+    srSafeText(srName(profilesById, issue.author_id)),
+    srFormatDate(issue.created_at, tz),
+    (issue.plus_ones || []).length,
+    srSafeText(srRepliesText(issue, profilesById, tz)),
+    srLink(shot, 'Apri'),
+    shot ? '=IMAGE(' + srQuote(shot) + ')' : '',
+    attachments.map(function (a) { return a.label; }).join(', '),
+    srLink(srFocusUrl(issue), 'Apri'),
+    issue.id,
+  ];
+  return { values: values, attachments: attachments };
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { formatTitle: formatTitle, formatMeta: formatMeta, formatReplyHeader: formatReplyHeader, planBlockUpdate: planBlockUpdate, nextKnown: nextKnown };
+  module.exports = { SR_COLUMNS: SR_COLUMNS, SR_COL: SR_COL, buildRow: buildRow, srSafeText: srSafeText, srImagePaths: srImagePaths, srFormatDate: srFormatDate };
 }
 
-/* Stage Review — archivio Google Docs: sincronizzazione Supabase → un Google Doc per sito.
- * Incollare in Apps Script come file "sync.gs" (insieme a "format.gs").
+/* Stage Review — archivio su Fogli Google: sincronizzazione Supabase → un foglio per sito.
  * Proprietà dello script richieste: SUPABASE_URL, SERVICE_ROLE_KEY, FOLDER_ID. */
 
 var SR_TZ = 'Europe/Rome';
-var SR_MAX_RUN_MS = 4 * 60 * 1000; // Apps Script interrompe a 6 minuti
-var SR_SETTLE_MS = 30 * 1000;      // ignora modifiche più recenti: transazioni forse non ancora visibili
+var SR_MAX_RUN_MS = 4 * 60 * 1000;   // Apps Script interrompe a 6 minuti
+var SR_SETTLE_MS = 30 * 1000;        // ignora modifiche più recenti: transazioni forse non ancora visibili
 var SR_BATCH = 50;
-var SR_IMAGE_WIDTH = 480;
+var SR_LINK_SECONDS = 315360000;     // link alle immagini validi 10 anni
+var SR_ROW_HEIGHT = 90;              // spazio per l'anteprima dello screenshot
 var SR_START_WATERMARK = '1970-01-01T00:00:00+00:00|00000000-0000-0000-0000-000000000000';
+var SR_WIDTHS = [48, 110, 180, 110, 320, 140, 130, 48, 320, 80, 150, 220, 90, 60];
 
 /** Da eseguire una volta: crea il trigger ogni 10 minuti. */
 function installTrigger() {
@@ -114,28 +134,26 @@ function srRun_() {
   var props = PropertiesService.getScriptProperties();
   var cfg = srConfig_(props);
   var error = null;
-  var budget = function () { return Date.now() - started < SR_MAX_RUN_MS; };
   try {
     var profiles = srIndex_(srRest_(cfg, 'get', '/rest/v1/profiles?select=id,name'));
     var projects = srIndex_(srRest_(cfg, 'get', '/rest/v1/projects?select=id,name,archive_doc_url'));
     var settled = encodeURIComponent(new Date(Date.now() - SR_SETTLE_MS).toISOString());
     var more = true;
-    while (more && budget()) {
-      var wm = (props.getProperty('WATERMARK') || SR_START_WATERMARK).split('|');
+    while (more && Date.now() - started < SR_MAX_RUN_MS) {
+      var wm = (props.getProperty('SHEET_WATERMARK') || SR_START_WATERMARK).split('|');
       var t = encodeURIComponent(wm[0]);
-      var rows = srRest_(cfg, 'get', '/rest/v1/issues?select=*,replies(*,attachments(*)),attachments(*),plus_ones(user_id)'
+      var rows = srRest_(cfg, 'get', '/rest/v1/issues?select=*,replies(*),attachments(*),plus_ones(user_id)'
         + '&or=(updated_at.gt.' + t + ',and(updated_at.eq.' + t + ',id.gt.' + wm[1] + '))'
         + '&updated_at=lt.' + settled
         + '&order=updated_at.asc,id.asc&limit=' + SR_BATCH);
       for (var i = 0; i < rows.length; i++) {
+        if (Date.now() - started > SR_MAX_RUN_MS) { more = false; break; }
         var issue = rows[i];
-        if (!profiles[issue.author_id] || (issue.deleted_by && !profiles[issue.deleted_by])) {
-          profiles = srIndex_(srRest_(cfg, 'get', '/rest/v1/profiles?select=id,name'));
-        }
+        if (!profiles[issue.author_id]) profiles = srIndex_(srRest_(cfg, 'get', '/rest/v1/profiles?select=id,name'));
         if (!projects[issue.project_id]) projects = srIndex_(srRest_(cfg, 'get', '/rest/v1/projects?select=id,name,archive_doc_url'));
-        // false = tempo finito prima di toccare il Doc: la segnalazione resta per il giro dopo
-        if (!srWriteIssue_(cfg, props, projects[issue.project_id], issue, profiles, budget)) { more = false; break; }
-        props.setProperty('WATERMARK', issue.updated_at + '|' + issue.id);
+        srWriteIssue_(cfg, props, projects[issue.project_id], issue, profiles);
+        SpreadsheetApp.flush(); // salvato prima di far avanzare il segnaposto
+        props.setProperty('SHEET_WATERMARK', issue.updated_at + '|' + issue.id);
       }
       if (rows.length < SR_BATCH) more = false;
     }
@@ -181,12 +199,17 @@ function srRest_(cfg, method, path, body, extraHeaders) {
   return text ? JSON.parse(text) : null;
 }
 
-function srFetchImage_(cfg, path) {
+/** Link firmati (10 anni) per le immagini, in una sola chiamata. Se fallisce: nessun link. */
+function srSignedUrls_(cfg, paths) {
+  var out = {};
+  if (!paths.length) return out;
   try {
-    var res = UrlFetchApp.fetch(cfg.url + '/storage/v1/object/media/' + path.split('/').map(encodeURIComponent).join('/'),
-      { headers: srHeaders_(cfg), muteHttpExceptions: true });
-    return res.getResponseCode() < 300 ? res.getBlob() : null;
-  } catch (e) { return null; }
+    var res = srRest_(cfg, 'post', '/storage/v1/object/sign/media', { expiresIn: SR_LINK_SECONDS, paths: paths });
+    (res || []).forEach(function (r) {
+      if (r && r.signedURL && !r.error) out[r.path] = cfg.url + '/storage/v1' + r.signedURL;
+    });
+  } catch (e) { /* la riga viene scritta lo stesso, senza immagini */ }
+  return out;
 }
 
 function srIndex_(rows) {
@@ -195,166 +218,69 @@ function srIndex_(rows) {
   return o;
 }
 
-// ---- Google Docs ----
+// ---- Fogli Google ----
 
-function srDocFor_(cfg, props, project) {
-  var id = props.getProperty('doc:' + project.id);
-  var doc = null;
+function srSheetFor_(cfg, props, project) {
+  var key = 'sheet:' + project.id;
   var wanted = 'Stage Review — ' + project.name;
-  if (id) { try { doc = DocumentApp.openById(id); } catch (e) { doc = null; } }
-  if (doc && doc.getName() !== wanted) {
-    // sito rinominato nella board: aggiorna il nome del file e il titolo in cima al Doc
-    doc.setName(wanted);
-    var top = doc.getBody().getChild(0).asParagraph();
-    if (top.getText().indexOf('Stage Review — ') === 0) top.setText(wanted);
+  var id = props.getProperty(key);
+  var ss = null;
+  if (id) { try { ss = SpreadsheetApp.openById(id); } catch (e) { ss = null; } }
+  if (ss) {
+    if (ss.getName() !== wanted) ss.rename(wanted); // sito rinominato nella board
+    return ss.getSheets()[0];
   }
-  if (!doc) {
-    doc = DocumentApp.create(wanted);
-    props.setProperty('doc:' + project.id, doc.getId()); // subito: un errore dopo non crea Doc doppi
-    DriveApp.getFileById(doc.getId()).moveTo(DriveApp.getFolderById(cfg.folder));
-    var body = doc.getBody();
-    var title = body.getChild(0).asParagraph();
-    title.setText(wanted); // setText non restituisce il paragrafo: niente catene
-    title.setHeading(DocumentApp.ParagraphHeading.TITLE);
-    body.appendParagraph('Archivio automatico delle segnalazioni, aggiornato ogni 10 minuti. Non modificare i blocchi delle segnalazioni: il testo scritto fuori dai blocchi resta intatto.');
-    srRest_(cfg, 'patch', '/rest/v1/projects?id=eq.' + project.id, { archive_doc_url: doc.getUrl() });
+  ss = SpreadsheetApp.create(wanted);
+  props.setProperty(key, ss.getId()); // subito: un errore dopo non crea fogli doppi
+  DriveApp.getFileById(ss.getId()).moveTo(DriveApp.getFolderById(cfg.folder));
+  var sheet = ss.getSheets()[0];
+  sheet.setName('Segnalazioni');
+  sheet.getRange(1, 1, 1, SR_COLUMNS.length).setValues([SR_COLUMNS]);
+  sheet.getRange(1, 1, 1, SR_COLUMNS.length).setFontWeight('bold');
+  sheet.setFrozenRows(1);
+  SR_WIDTHS.forEach(function (w, i) { sheet.setColumnWidth(i + 1, w); });
+  sheet.hideColumns(SR_COL.ID);
+  srRest_(cfg, 'patch', '/rest/v1/projects?id=eq.' + project.id, { archive_doc_url: ss.getUrl() });
+  return sheet;
+}
+
+/** Numero di riga della segnalazione (colonna ID), oppure -1. */
+function srFindRow_(sheet, issueId) {
+  var last = sheet.getLastRow();
+  if (last < 2) return -1;
+  var ids = sheet.getRange(2, SR_COL.ID, last - 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) if (ids[i][0] === issueId) return i + 2;
+  return -1;
+}
+
+function srWriteIssue_(cfg, props, project, issue, profiles) {
+  if (!project) return;
+  var key = 'sheet:' + project.id;
+  if (issue.deleted_at) {
+    // eliminata: se è nel foglio la togliamo, altrimenti non serve nemmeno creare il foglio
+    if (!props.getProperty(key)) return;
+    var s = srSheetFor_(cfg, props, project);
+    var r = srFindRow_(s, issue.id);
+    if (r > 0) s.deleteRow(r);
+    return;
   }
-  return doc;
-}
+  var sheet = srSheetFor_(cfg, props, project);
+  var urls = srSignedUrls_(cfg, srImagePaths(issue));
+  var built = buildRow(issue, profiles, SR_TZ, urls);
+  var row = srFindRow_(sheet, issue.id);
+  if (row < 0) row = sheet.getLastRow() + 1;
+  sheet.getRange(row, 1, 1, SR_COLUMNS.length).setValues([built.values]);
 
-function srNamed_(doc, name) {
-  var r = doc.getNamedRanges(name);
-  return r.length ? r[0] : null;
-}
-
-function srNamedEl_(doc, name) {
-  var nr = srNamed_(doc, name);
-  if (!nr) return null;
-  var els = nr.getRange().getRangeElements();
-  return els.length ? els[0].getElement() : null;
-}
-
-function srSetNamed_(doc, name, elements) {
-  doc.getNamedRanges(name).forEach(function (n) { n.remove(); });
-  var b = doc.newRange();
-  elements.forEach(function (e) { b.addElement(e); });
-  doc.addNamedRange(name, b.build());
-}
-
-/** Scrive paragrafi in fondo (index null) o a partire da un indice del body. */
-function srWriter_(body, index) {
-  var i = index;
-  var written = [];
-  function para(text) {
-    var p = i === null ? body.appendParagraph(text) : body.insertParagraph(i++, text);
-    p.setHeading(DocumentApp.ParagraphHeading.NORMAL);
-    written.push(p);
-    return p;
-  }
-  return {
-    written: written,
-    para: para,
-    image: function (blob) {
-      if (!blob) return para('[immagine non disponibile]');
-      var p = para('');
-      try {
-        var img = p.appendInlineImage(blob);
-        var w = img.getWidth(), h = img.getHeight();
-        if (w > 0) { img.setWidth(SR_IMAGE_WIDTH); img.setHeight(Math.round(h * SR_IMAGE_WIDTH / w)); }
-      } catch (e) { p.setText('[immagine non disponibile]'); }
-      return p;
-    },
-  };
-}
-
-function srImagePath_(issue, id) {
-  if (id === 'shot') return issue.screenshot_path;
-  var a = (issue.attachments || []).filter(function (x) { return x.id === id; })[0];
-  return a ? a.path : null;
-}
-
-function srSetMeta_(p, issue, profiles) {
-  var text = formatMeta(issue, profiles, SR_TZ);
-  p.setText(text);
-  var start = text.indexOf(issue.page_url, text.indexOf('Apri nel sito: '));
-  if (start >= 0) p.editAsText().setLinkUrl(start, start + issue.page_url.length - 1, issue.page_url);
-}
-
-function srWriteReply_(blobs, w, doc, issue, reply, profiles) {
-  var header = w.para('↳ ' + formatReplyHeader(reply, profiles, SR_TZ));
-  header.editAsText().setBold(true);
-  srSetNamed_(doc, 'sr-' + issue.id + '-r-' + reply.id, [header]);
-  w.para(reply.body);
-  (reply.attachments || []).filter(function (a) { return !a.deleted_at; }).sort(srByCreated)
-    .forEach(function (a) { w.image(blobs[a.path]); });
-}
-
-/** Percorsi delle immagini che il piano scriverà (screenshot, allegati, allegati delle risposte nuove). */
-function srPlannedPaths_(issue, plan, byId) {
-  var paths = plan.newImageIds.map(function (id) { return srImagePath_(issue, id); });
-  plan.newReplyIds.forEach(function (rid) {
-    (byId[rid].attachments || []).filter(function (a) { return !a.deleted_at; }).forEach(function (a) { paths.push(a.path); });
-  });
-  return paths.filter(function (p) { return p; });
-}
-
-/**
- * Scrive (o aggiorna) il blocco di una segnalazione. Le immagini vengono scaricate PRIMA di
- * toccare il Doc; il Doc viene salvato prima che il chiamante faccia avanzare il segnaposto.
- * Restituisce false se il tempo è finito prima di iniziare a scrivere.
- */
-function srWriteIssue_(cfg, props, project, issue, profiles, budget) {
-  if (!project) return true;
-  var key = 'blk:' + issue.id;
-  var known = JSON.parse(props.getProperty(key) || 'null');
-  var doc = srDocFor_(cfg, props, project);
-  if (known && !srNamed_(doc, 'sr-' + issue.id + '-end')) known = null; // blocco cancellato a mano: si riscrive
-  var plan = planBlockUpdate(issue, known);
-  var replies = (issue.replies || []).slice().sort(srByCreated);
-  var byId = {};
-  replies.forEach(function (r) { byId[r.id] = r; });
-
-  var blobs = {};
-  var paths = srPlannedPaths_(issue, plan, byId);
-  for (var i = 0; i < paths.length; i++) {
-    if (!budget()) return false;
-    blobs[paths[i]] = srFetchImage_(cfg, paths[i]);
-  }
-  if (!budget()) return false;
-  var body = doc.getBody();
-
-  if (plan.create) {
-    var w = srWriter_(body, null);
-    w.para(formatTitle(issue)).setHeading(DocumentApp.ParagraphHeading.HEADING2);
-    var meta = w.para('');
-    srSetMeta_(meta, issue, profiles);
-    srSetNamed_(doc, 'sr-' + issue.id + '-meta', [meta]);
-    w.para(issue.body);
-    plan.newImageIds.forEach(function (id) { w.image(blobs[srImagePath_(issue, id)]); });
-    plan.newReplyIds.forEach(function (rid) { srWriteReply_(blobs, w, doc, issue, byId[rid], profiles); });
-    var end = w.para('');
-    end.appendHorizontalRule();
-    srSetNamed_(doc, 'sr-' + issue.id + '-end', [end]);
-    srSetNamed_(doc, 'sr-' + issue.id, w.written);
-  } else {
-    var metaEl = srNamedEl_(doc, 'sr-' + issue.id + '-meta');
-    if (metaEl) srSetMeta_(metaEl.asParagraph(), issue, profiles);
-    plan.deletedReplyIds.forEach(function (rid) {
-      var h = srNamedEl_(doc, 'sr-' + issue.id + '-r-' + rid);
-      if (h && byId[rid]) h.asParagraph().setText('↳ ' + formatReplyHeader(byId[rid], profiles, SR_TZ));
+  var linked = built.attachments.filter(function (a) { return a.url; });
+  if (linked.length) {
+    var text = built.attachments.map(function (a) { return a.label; }).join(', ');
+    var rt = SpreadsheetApp.newRichTextValue().setText(text);
+    var pos = 0;
+    built.attachments.forEach(function (a) {
+      if (a.url) rt.setLinkUrl(pos, pos + a.label.length, a.url);
+      pos += a.label.length + 2;
     });
-    if (plan.newImageIds.length || plan.newReplyIds.length) {
-      var endEl = srNamedEl_(doc, 'sr-' + issue.id + '-end');
-      var first = srNamedEl_(doc, 'sr-' + issue.id);
-      var w2 = srWriter_(body, body.getChildIndex(endEl));
-      plan.newImageIds.forEach(function (id) { w2.image(blobs[srImagePath_(issue, id)]); });
-      plan.newReplyIds.forEach(function (rid) { srWriteReply_(blobs, w2, doc, issue, byId[rid], profiles); });
-      var from = body.getChildIndex(first), to = body.getChildIndex(endEl), all = [];
-      for (var k = from; k <= to; k++) all.push(body.getChild(k));
-      srSetNamed_(doc, 'sr-' + issue.id, all);
-    }
+    sheet.getRange(row, SR_COL.Allegati).setRichTextValue(rt.build());
   }
-  doc.saveAndClose();
-  props.setProperty(key, JSON.stringify(nextKnown(issue)));
-  return true;
+  if (built.values[SR_COL.Anteprima - 1]) sheet.setRowHeight(row, SR_ROW_HEIGHT);
 }

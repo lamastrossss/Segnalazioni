@@ -1,55 +1,65 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'node:module';
 
-const { formatTitle, formatMeta, formatReplyHeader, planBlockUpdate, nextKnown } = createRequire(import.meta.url)('../../archive/format.js');
+const { SR_COLUMNS, buildRow, srSafeText, srImagePaths } = createRequire(import.meta.url)('../../archive/format.js');
 
 const profiles = { u1: { id: 'u1', name: 'Alessandra' }, u2: { id: 'u2', name: 'Marco' } };
 const iss = {
-  id: 'i1', number: 42, page_path: '/p', page_url: 'https://x.myshopify.com/p', viewport_class: 'mobile', viewport_width: 375,
-  author_id: 'u1', status: 'open', created_at: '2026-11-04T09:12:00Z', plus_ones: [], deleted_at: null, deleted_by: null,
+  id: 'i1', number: 42, page_path: '/products/opuntia', page_url: 'https://x.myshopify.com/products/opuntia?v=1#old',
+  viewport_class: 'mobile', viewport_width: 375, body: 'Titolo troppo vicino', author_id: 'u1', status: 'in_progress',
+  created_at: '2026-11-04T09:12:00Z', plus_ones: [{ user_id: 'u2' }], deleted_at: null,
   screenshot_path: 'p/i1/screenshot.jpg', attachments: [], replies: [],
 };
-const att = (id: string, reply_id: string | null = null, deleted_at: string | null = null) => ({ id, reply_id, deleted_at, created_at: id, path: `p/i1/${id}.jpg` });
-const rep = (id: string, deleted_at: string | null = null) => ({ id, author_id: 'u2', body: 'r', created_at: '2026-11-04T09:30:00Z', deleted_at, attachments: [] });
+const urls = { 'p/i1/screenshot.jpg': 'https://sb/shot?token=a', 'p/i1/a1.jpg': 'https://sb/a1', 'p/i1/r1.jpg': 'https://sb/r1' };
 
-describe('formato archivio', () => {
-  it('titolo', () => {
-    expect(formatTitle({ ...iss, page_path: '/products/opuntia-oil-mask' })).toBe('#42 · /products/opuntia-oil-mask · Mobile 375');
+describe('riga del foglio', () => {
+  it('colonne nell\'ordine previsto', () => {
+    expect(SR_COLUMNS).toEqual(['#', 'Stato', 'Pagina', 'Viewport', 'Segnalazione', 'Autore', 'Data', '+1', 'Risposte',
+      'Screenshot', 'Anteprima', 'Allegati', 'Apri nel sito', 'ID']);
   });
-  it('riga meta con fuso di Roma', () => {
-    expect(formatMeta({ ...iss, status: 'in_progress', plus_ones: [{ user_id: 'u2' }, { user_id: 'u3' }] }, profiles, 'Europe/Rome'))
-      .toBe('Alessandra · 04/11/2026 10:12 · Stato: In lavorazione · +1: 2 · Apri nel sito: https://x.myshopify.com/p');
+  it('valori, anteprima e link (formule con le virgole)', () => {
+    const { values } = buildRow(iss, profiles, 'Europe/Rome', urls);
+    expect(values).toEqual([
+      42, 'In lavorazione', '/products/opuntia', 'Mobile 375', 'Titolo troppo vicino', 'Alessandra', '04/11/2026 10:12', 1, '',
+      '=HYPERLINK("https://sb/shot?token=a","Apri")', '=IMAGE("https://sb/shot?token=a")', '',
+      '=HYPERLINK("https://x.myshopify.com/products/opuntia?v=1#stage-review=i1","Apri")', 'i1',
+    ]);
   });
-  it('riga meta di una segnalazione eliminata', () => {
-    expect(formatMeta({ ...iss, deleted_at: '2026-11-04T10:00:00Z', deleted_by: 'u2' }, profiles, 'Europe/Rome'))
-      .toContain(' · Eliminata il 04/11/2026 11:00 da Marco');
+  it('risposte (non eliminate) e allegati etichettati', () => {
+    const issue = {
+      ...iss,
+      replies: [
+        { id: 'r1', author_id: 'u2', body: 'Fatto', created_at: '2026-11-04T09:30:00Z', deleted_at: null },
+        { id: 'r2', author_id: 'u2', body: 'cancellata', created_at: '2026-11-04T09:40:00Z', deleted_at: 'x' },
+      ],
+      attachments: [
+        { id: 'a1', path: 'p/i1/a1.jpg', reply_id: null, created_at: '1', deleted_at: null },
+        { id: 'r1a', path: 'p/i1/r1.jpg', reply_id: 'r1', created_at: '2', deleted_at: null },
+        { id: 'del', path: 'p/i1/del.jpg', reply_id: null, created_at: '3', deleted_at: 'x' },
+      ],
+    };
+    const { values, attachments } = buildRow(issue, profiles, 'Europe/Rome', urls);
+    expect(values[8]).toBe('Marco · 04/11/2026 10:30: Fatto');
+    expect(values[11]).toBe('Immagine 1, Risposta di Marco 1');
+    expect(attachments).toEqual([{ label: 'Immagine 1', url: 'https://sb/a1' }, { label: 'Risposta di Marco 1', url: 'https://sb/r1' }]);
+    expect(srImagePaths(issue)).toEqual(['p/i1/screenshot.jpg', 'p/i1/a1.jpg', 'p/i1/r1.jpg']);
   });
-  it('intestazione risposta', () => {
-    expect(formatReplyHeader(rep('r1'), profiles, 'Europe/Rome')).toBe('Marco · 04/11/2026 10:30');
-    expect(formatReplyHeader(rep('r1', 'x'), profiles, 'Europe/Rome')).toBe('Marco · 04/11/2026 10:30 · eliminata');
+  it('senza screenshot: celle vuote', () => {
+    const { values } = buildRow({ ...iss, screenshot_path: null }, profiles, 'Europe/Rome', {});
+    expect(values[9]).toBe('');
+    expect(values[10]).toBe('');
   });
-  it('il testo con markup non viene interpretato (Review Focus 4)', () => {
-    expect(formatTitle({ ...iss, page_path: '/<b>x</b>' })).toContain('<b>x</b>');
+  it('il testo degli utenti non diventa mai una formula', () => {
+    expect(srSafeText('=IMPORTXML("http://x")')).toBe('\'=IMPORTXML("http://x")');
+    expect(srSafeText('+39 333')).toBe("'+39 333");
+    expect(srSafeText('-margine')).toBe("'-margine");
+    expect(srSafeText('@marco')).toBe("'@marco");
+    expect(srSafeText('normale')).toBe('normale');
+    const { values } = buildRow({ ...iss, body: '=HYPERLINK("http://evil","x")' }, profiles, 'Europe/Rome', urls);
+    expect(values[4]).toBe('\'=HYPERLINK("http://evil","x")');
   });
-  it('blocco nuovo: screenshot, allegati e risposte', () => {
-    const issue = { ...iss, attachments: [att('a1'), att('a2'), att('ar', 'r1'), att('del', null, 'x')], replies: [rep('r1')] };
-    expect(planBlockUpdate(issue, null)).toEqual({ create: true, newImageIds: ['shot', 'a1', 'a2'], newReplyIds: ['r1'], deletedReplyIds: [] });
-  });
-  it('blocco esistente: solo le novità', () => {
-    const issue = { ...iss, attachments: [att('a1'), att('a2')], replies: [rep('r1', 'x'), rep('r2')] };
-    const known = { imgs: ['shot', 'a1', 'a2'], replies: ['r1'] };
-    expect(planBlockUpdate(issue, known)).toEqual({ create: false, newImageIds: [], newReplyIds: ['r2'], deletedReplyIds: ['r1'] });
-  });
-  it('una risposta già marcata eliminata non si rimarca', () => {
-    const issue = { ...iss, attachments: [], replies: [rep('r1', 'x')] };
-    expect(planBlockUpdate({ ...issue, screenshot_path: null }, { imgs: [], replies: ['r1'], deleted: ['r1'] }).deletedReplyIds).toEqual([]);
-  });
-  it('allegato arrivato dopo su una risposta già scritta viene aggiunto', () => {
-    const issue = { ...iss, screenshot_path: null, attachments: [att('late', 'r1')], replies: [rep('r1')] };
-    expect(planBlockUpdate(issue, { imgs: [], replies: ['r1'] }).newImageIds).toEqual(['late']);
-  });
-  it('nextKnown ricorda immagini, risposte ed eliminate', () => {
-    const issue = { ...iss, attachments: [att('a1'), att('ar', 'r2')], replies: [rep('r1', 'x'), rep('r2')] };
-    expect(nextKnown(issue)).toEqual({ imgs: ['shot', 'a1', 'ar'], replies: ['r1', 'r2'], deleted: ['r1'] });
+  it('le virgolette negli URL vengono raddoppiate nelle formule', () => {
+    const { values } = buildRow({ ...iss, page_url: 'https://x.com/p?q="a"' }, profiles, 'Europe/Rome', urls);
+    expect(values[12]).toBe('=HYPERLINK("https://x.com/p?q=""a""#stage-review=i1","Apri")');
   });
 });

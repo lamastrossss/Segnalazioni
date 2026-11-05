@@ -1,8 +1,12 @@
-/* Stage Review — archivio Google Docs: funzioni pure di formattazione.
- * Incollare in Apps Script come file "format.gs". Nessun import: funzioni globali. */
+/* Stage Review — archivio su Fogli Google: funzioni pure (una riga per segnalazione).
+ * Funzioni globali, nessun import: si incollano in Apps Script. */
 
 var SR_VIEWPORT = { mobile: 'Mobile', tablet: 'Tablet', desktop: 'Desktop' };
 var SR_STATUS = { open: 'Aperta', in_progress: 'In lavorazione', resolved: 'Risolta' };
+var SR_COLUMNS = ['#', 'Stato', 'Pagina', 'Viewport', 'Segnalazione', 'Autore', 'Data', '+1', 'Risposte',
+  'Screenshot', 'Anteprima', 'Allegati', 'Apri nel sito', 'ID'];
+var SR_COL = {};
+SR_COLUMNS.forEach(function (c, i) { SR_COL[c] = i + 1; });
 
 function srFormatDate(iso, tz) {
   var d = new Date(iso);
@@ -21,63 +25,78 @@ function srName(profilesById, id) {
 
 function srByCreated(a, b) { return String(a.created_at).localeCompare(String(b.created_at)); }
 
-function formatTitle(issue) {
-  return '#' + issue.number + ' · ' + issue.page_path + ' · ' + SR_VIEWPORT[issue.viewport_class] + ' ' + issue.viewport_width;
+/** Il testo scritto dagli utenti non deve mai diventare una formula del foglio. */
+function srSafeText(s) {
+  s = s == null ? '' : String(s);
+  return /^[=+\-@]/.test(s) ? "'" + s : s;
 }
 
-function formatMeta(issue, profilesById, tz) {
-  var plus = (issue.plus_ones || []).length;
-  var s = srName(profilesById, issue.author_id) + ' · ' + srFormatDate(issue.created_at, tz)
-    + ' · Stato: ' + SR_STATUS[issue.status] + ' · +1: ' + plus + ' · Apri nel sito: ' + issue.page_url;
-  if (issue.deleted_at) s += ' · Eliminata il ' + srFormatDate(issue.deleted_at, tz) + ' da ' + srName(profilesById, issue.deleted_by);
-  return s;
+function srQuote(s) { return '"' + String(s).replace(/"/g, '""') + '"'; }
+
+function srLink(url, label) {
+  return url ? '=HYPERLINK(' + srQuote(url) + ',' + srQuote(label) + ')' : '';
 }
 
-function formatReplyHeader(reply, profilesById, tz) {
-  return srName(profilesById, reply.author_id) + ' · ' + srFormatDate(reply.created_at, tz) + (reply.deleted_at ? ' · eliminata' : '');
+function srFocusUrl(issue) {
+  return String(issue.page_url).split('#')[0] + '#stage-review=' + issue.id;
 }
 
-/** Immagini della segnalazione (screenshot + allegati non di risposta), nell'ordine del Doc. */
-function srIssueImageIds(issue) {
-  var ids = issue.screenshot_path ? ['shot'] : [];
-  (issue.attachments || []).filter(function (a) { return !a.reply_id && !a.deleted_at; }).sort(srByCreated)
-    .forEach(function (a) { ids.push(a.id); });
-  return ids;
+function srAttachments(issue) {
+  return (issue.attachments || []).filter(function (a) { return !a.deleted_at; }).sort(srByCreated);
 }
 
-function planBlockUpdate(issue, known) {
-  var replies = (issue.replies || []).slice().sort(srByCreated);
-  if (!known) {
-    return { create: true, newImageIds: srIssueImageIds(issue), newReplyIds: replies.map(function (r) { return r.id; }), deletedReplyIds: [] };
-  }
-  var imgs = known.imgs || [], seenReplies = known.replies || [], marked = known.deleted || [];
-  var candidates = srIssueImageIds(issue);
-  (issue.attachments || []).filter(function (a) {
-    return a.reply_id && !a.deleted_at && seenReplies.indexOf(a.reply_id) >= 0;
-  }).sort(srByCreated).forEach(function (a) { candidates.push(a.id); });
-  return {
-    create: false,
-    newImageIds: candidates.filter(function (id) { return imgs.indexOf(id) < 0; }),
-    newReplyIds: replies.filter(function (r) { return seenReplies.indexOf(r.id) < 0; }).map(function (r) { return r.id; }),
-    deletedReplyIds: replies.filter(function (r) {
-      return r.deleted_at && seenReplies.indexOf(r.id) >= 0 && marked.indexOf(r.id) < 0;
-    }).map(function (r) { return r.id; }),
-  };
+/** Percorsi delle immagini da firmare: screenshot e allegati non eliminati. */
+function srImagePaths(issue) {
+  var paths = issue.screenshot_path ? [issue.screenshot_path] : [];
+  srAttachments(issue).forEach(function (a) { paths.push(a.path); });
+  return paths;
 }
 
-/** Stato da ricordare dopo aver scritto il blocco. */
-function nextKnown(issue) {
-  var imgs = issue.screenshot_path ? ['shot'] : [];
-  (issue.attachments || []).filter(function (a) { return !a.deleted_at; }).sort(srByCreated)
-    .forEach(function (a) { imgs.push(a.id); });
-  var replies = (issue.replies || []).slice().sort(srByCreated);
-  return {
-    imgs: imgs,
-    replies: replies.map(function (r) { return r.id; }),
-    deleted: replies.filter(function (r) { return r.deleted_at; }).map(function (r) { return r.id; }),
-  };
+/** Etichette degli allegati: "Immagine 1", "Risposta di Marco 1". */
+function srAttachmentLinks(issue, profilesById, urls) {
+  var replies = {};
+  (issue.replies || []).forEach(function (r) { replies[r.id] = r; });
+  var counters = {};
+  return srAttachments(issue).map(function (a) {
+    var who = a.reply_id && replies[a.reply_id] ? 'Risposta di ' + srName(profilesById, replies[a.reply_id].author_id) : 'Immagine';
+    counters[who] = (counters[who] || 0) + 1;
+    return { label: who + ' ' + counters[who], url: urls[a.path] || null };
+  });
+}
+
+function srRepliesText(issue, profilesById, tz) {
+  return (issue.replies || []).filter(function (r) { return !r.deleted_at; }).sort(srByCreated).map(function (r) {
+    return srName(profilesById, r.author_id) + ' · ' + srFormatDate(r.created_at, tz) + ': ' + r.body;
+  }).join('\n');
+}
+
+/**
+ * Riga del foglio per una segnalazione. urls: { <percorso storage>: link firmato }.
+ * Restituisce i valori (formule in sintassi inglese con le virgole, come vuole Apps Script)
+ * e i link degli allegati da mettere come testo con collegamenti nella colonna Allegati.
+ */
+function buildRow(issue, profilesById, tz, urls) {
+  var shot = issue.screenshot_path ? urls[issue.screenshot_path] || null : null;
+  var attachments = srAttachmentLinks(issue, profilesById, urls);
+  var values = [
+    issue.number,
+    SR_STATUS[issue.status] || issue.status,
+    srSafeText(issue.page_path),
+    SR_VIEWPORT[issue.viewport_class] + ' ' + issue.viewport_width,
+    srSafeText(issue.body),
+    srSafeText(srName(profilesById, issue.author_id)),
+    srFormatDate(issue.created_at, tz),
+    (issue.plus_ones || []).length,
+    srSafeText(srRepliesText(issue, profilesById, tz)),
+    srLink(shot, 'Apri'),
+    shot ? '=IMAGE(' + srQuote(shot) + ')' : '',
+    attachments.map(function (a) { return a.label; }).join(', '),
+    srLink(srFocusUrl(issue), 'Apri'),
+    issue.id,
+  ];
+  return { values: values, attachments: attachments };
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { formatTitle: formatTitle, formatMeta: formatMeta, formatReplyHeader: formatReplyHeader, planBlockUpdate: planBlockUpdate, nextKnown: nextKnown };
+  module.exports = { SR_COLUMNS: SR_COLUMNS, SR_COL: SR_COL, buildRow: buildRow, srSafeText: srSafeText, srImagePaths: srImagePaths, srFormatDate: srFormatDate };
 }
