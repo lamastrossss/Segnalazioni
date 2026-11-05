@@ -6,7 +6,14 @@ update public.profiles p
   from auth.users u
   join (values
     ('alessandra.mastroeni@thewavestudio.it', 'Alessandra Mastroeni')
-    -- , ('nome.cognome@thewavestudio.it', 'Nome Cognome')
+  , ('leonardo.maltese@thewavestudio.it', 'Leonardo Maltese')
+  , ('simone.guccio@thewavestudio.it', 'Simone Guccio')
+  , ('edoardo.benissimo@thewavestudio.it', 'Edoardo Benissimo')
+  , ('simona.brancato@thewavestudio.it', 'Simona Brancato')
+  , ('emanuela.figliuolo@thewavestudio.it', 'Emanuela Figliuolo')
+  , ('giovanna.pavano@thewavestudio.it', 'Giovanna Pavano')
+  , ('luca.valenti@thewavestudio.it', 'Luca Valenti')
+  , ('michele.cocuccio@thewavestudio.it', 'Michele Cocuccio')
   ) as v(email, nome) on lower(u.email) = lower(v.email)
  where p.id = u.id;
 
