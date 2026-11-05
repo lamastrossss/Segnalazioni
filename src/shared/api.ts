@@ -14,15 +14,14 @@ export interface ProjectSummary extends Project {
 
 const BUCKET = 'media';
 const SIGNED_URL_SECONDS = 3600;
-const ISSUE_COLS = '*, plus_ones(user_id), replies(id, deleted_at)';
+const ISSUE_COLS = '*, replies(id, deleted_at)';
 
 type Row = Record<string, any>;
 
 function toIssue(row: Row): Issue {
-  const { plus_ones, replies, attachments: _a, ...rest } = row;
+  const { replies, attachments: _a, plus_ones: _p, ...rest } = row;
   return {
     ...(rest as Issue),
-    plus_ones: (plus_ones ?? []).map((p: Row) => p.user_id),
     replies_count: (replies ?? []).filter((r: Row) => !r.deleted_at).length,
   };
 }
@@ -123,7 +122,7 @@ export function createApi(client: SupabaseClient) {
 
     async getIssue(id: string): Promise<Result<IssueDetail>> {
       return run(
-        client.from('issues').select('*, plus_ones(user_id), replies(*, attachments(*)), attachments(*)').eq('id', id).single(),
+        client.from('issues').select('*, replies(*, attachments(*)), attachments(*)').eq('id', id).single(),
         d => {
           const row = d as Row;
           const replies: Reply[] = ((row.replies ?? []) as Row[])
@@ -164,16 +163,6 @@ export function createApi(client: SupabaseClient) {
     setStatus(issueId: string, status: IssueStatus) { return updateOne('issues', issueId, { status }); },
     softDeleteIssue(issueId: string) { return updateOne('issues', issueId, { deleted_at: new Date().toISOString() }); },
     softDeleteReply(replyId: string) { return updateOne('replies', replyId, { deleted_at: new Date().toISOString() }); },
-
-    async togglePlusOne(issueId: string, userId: string): Promise<Result<boolean>> {
-      const cur = await run(client.from('plus_ones').select('user_id').eq('issue_id', issueId).eq('user_id', userId).maybeSingle(), d => !!d);
-      if (!cur.ok) return cur;
-      if (cur.value) {
-        const r = await run(client.from('plus_ones').delete().eq('issue_id', issueId).eq('user_id', userId), () => false);
-        return r;
-      }
-      return run(client.from('plus_ones').insert({ issue_id: issueId, user_id: userId }), () => true);
-    },
 
     async signedUrl(path: string): Promise<Result<string>> {
       try {

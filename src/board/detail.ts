@@ -26,7 +26,7 @@ export function renderDetail(container: HTMLElement, deps: DetailDeps) {
       el('div', { class: 'sr-row', attrs: { style: 'margin:8px 0' } }, [
         el('button', { class: 'sr-btn', text: 'Apri nel sito', attrs: { type: 'button' },
           on: { click: () => { window.open(withFocusHash(issue.page_url, issue.id), '_blank', 'noopener'); } } }),
-        el('span', { class: 'sr-muted', text: 'Poi clicca Revisiona nei preferiti per vedere il pin.' }),
+        el('span', { class: 'sr-muted', text: 'Poi apri Stage Review dall’icona dell’estensione (o Alt+Shift+R) per vedere il pin.' }),
       ]),
     ],
   });

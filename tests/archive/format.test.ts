@@ -7,26 +7,26 @@ const profiles = { u1: { id: 'u1', name: 'Alessandra' }, u2: { id: 'u2', name: '
 const iss = {
   id: 'i1', number: 42, page_path: '/products/opuntia', page_url: 'https://x.myshopify.com/products/opuntia?v=1#old',
   viewport_class: 'mobile', viewport_width: 375, body: 'Titolo troppo vicino', author_id: 'u1', status: 'in_progress',
-  created_at: '2026-11-04T09:12:00Z', plus_ones: [{ user_id: 'u2' }], deleted_at: null,
+  created_at: '2026-11-04T09:12:00Z', deleted_at: null,
   screenshot_path: 'p/i1/screenshot.jpg', attachments: [], replies: [],
 };
 const urls = { 'p/i1/screenshot.jpg': 'https://sb/shot?token=a', 'p/i1/a1.jpg': 'https://sb/a1', 'p/i1/r1.jpg': 'https://sb/r1' };
 
 describe('riga del foglio', () => {
   it('colonne nell\'ordine previsto', () => {
-    expect(SR_COLUMNS).toEqual(['#', 'Stato', 'Pagina', 'Viewport', 'Segnalazione', 'Autore', 'Data', '+1', 'Risposte',
+    expect(SR_COLUMNS).toEqual(['#', 'Stato', 'Pagina', 'Viewport', 'Segnalazione', 'Autore', 'Data', 'Risposte',
       'Screenshot', 'Anteprima', 'Allegati', 'Apri nel sito', 'ID']);
   });
 
   it('valori e link come testo collegato (niente formule con più parametri: il foglio è in italiano)', () => {
     const { values, links } = buildRow(iss, profiles, 'Europe/Rome', urls);
     expect(values).toEqual([
-      42, 'In lavorazione', '/products/opuntia', 'Mobile 375', 'Titolo troppo vicino', 'Alessandra', '04/11/2026 10:12', 1, '',
+      42, 'In lavorazione', '/products/opuntia', 'Mobile 375', 'Titolo troppo vicino', 'Alessandra', '04/11/2026 10:12', '',
       'Apri', '=IMAGE("https://sb/shot?token=a")', '', 'Apri', 'i1',
     ]);
     expect(links).toEqual([
-      { col: 10, parts: [{ label: 'Apri', url: 'https://sb/shot?token=a' }] },
-      { col: 13, parts: [{ label: 'Apri', url: 'https://x.myshopify.com/products/opuntia?v=1#stage-review=i1' }] },
+      { col: 9, parts: [{ label: 'Apri', url: 'https://sb/shot?token=a' }] },
+      { col: 12, parts: [{ label: 'Apri', url: 'https://x.myshopify.com/products/opuntia?v=1#stage-review=i1' }] },
     ]);
   });
 
@@ -52,18 +52,18 @@ describe('riga del foglio', () => {
       ],
     };
     const { values, links } = buildRow(issue, profiles, 'Europe/Rome', urls);
-    expect(values[8]).toBe('Marco · 04/11/2026 10:30: Fatto');
-    expect(values[11]).toBe('Immagine 1, Risposta di Marco 1');
-    expect(links.find((l: any) => l.col === 12)).toEqual({ col: 12, parts: [
+    expect(values[7]).toBe('Marco · 04/11/2026 10:30: Fatto');
+    expect(values[10]).toBe('Immagine 1, Risposta di Marco 1');
+    expect(links.find((l: any) => l.col === 11)).toEqual({ col: 11, parts: [
       { label: 'Immagine 1', url: 'https://sb/a1' }, { label: 'Risposta di Marco 1', url: 'https://sb/r1' }] });
     expect(srImagePaths(issue)).toEqual(['p/i1/screenshot.jpg', 'p/i1/a1.jpg', 'p/i1/r1.jpg']);
   });
 
   it('senza screenshot: celle vuote e nessun link', () => {
     const { values, links } = buildRow({ ...iss, screenshot_path: null }, profiles, 'Europe/Rome', {});
+    expect(values[8]).toBe('');
     expect(values[9]).toBe('');
-    expect(values[10]).toBe('');
-    expect(links.map((l: any) => l.col)).toEqual([13]);
+    expect(links.map((l: any) => l.col)).toEqual([12]);
   });
 
   it('il testo degli utenti non diventa mai una formula', () => {
@@ -78,6 +78,6 @@ describe('riga del foglio', () => {
 
   it('le virgolette negli URL vengono raddoppiate nella formula IMAGE', () => {
     const { values } = buildRow(iss, profiles, 'Europe/Rome', { 'p/i1/screenshot.jpg': 'https://sb/s?q="a"' });
-    expect(values[10]).toBe('=IMAGE("https://sb/s?q=""a""")');
+    expect(values[9]).toBe('=IMAGE("https://sb/s?q=""a""")');
   });
 });

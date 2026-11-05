@@ -3,7 +3,7 @@ import type { ViewportClass } from './types';
 
 export interface PresenceState { userId: string; name: string; color: string; page_path: string; viewport_class: ViewportClass }
 
-/** Notifica l'id di ogni segnalazione del progetto creata o modificata (risposte, allegati e +1 compresi). */
+/** Notifica l'id di ogni segnalazione del progetto creata o modificata (risposte e allegati compresi). */
 export function subscribeProject(client: SupabaseClient, projectId: string, onIssueChanged: (issueId: string) => void): () => void {
   const channel = client
     .channel(`issues:${projectId}`)

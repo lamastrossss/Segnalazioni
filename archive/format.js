@@ -3,7 +3,7 @@
 
 var SR_VIEWPORT = { mobile: 'Mobile', tablet: 'Tablet', desktop: 'Desktop' };
 var SR_STATUS = { open: 'Aperta', in_progress: 'In lavorazione', resolved: 'Risolta' };
-var SR_COLUMNS = ['#', 'Stato', 'Pagina', 'Viewport', 'Segnalazione', 'Autore', 'Data', '+1', 'Risposte',
+var SR_COLUMNS = ['#', 'Stato', 'Pagina', 'Viewport', 'Segnalazione', 'Autore', 'Data', 'Risposte',
   'Screenshot', 'Anteprima', 'Allegati', 'Apri nel sito', 'ID'];
 var SR_COL = {};
 SR_COLUMNS.forEach(function (c, i) { SR_COL[c] = i + 1; });
@@ -85,7 +85,6 @@ function buildRow(issue, profilesById, tz, urls) {
     srSafeText(issue.body),
     srSafeText(srName(profilesById, issue.author_id)),
     srFormatDate(issue.created_at, tz),
-    (issue.plus_ones || []).length,
     srSafeText(srRepliesText(issue, profilesById, tz)),
     shot ? 'Apri' : '',
     shot ? '=IMAGE(' + srQuote(shot) + ')' : '',

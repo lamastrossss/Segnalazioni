@@ -4,7 +4,7 @@
 
 var SR_VIEWPORT = { mobile: 'Mobile', tablet: 'Tablet', desktop: 'Desktop' };
 var SR_STATUS = { open: 'Aperta', in_progress: 'In lavorazione', resolved: 'Risolta' };
-var SR_COLUMNS = ['#', 'Stato', 'Pagina', 'Viewport', 'Segnalazione', 'Autore', 'Data', '+1', 'Risposte',
+var SR_COLUMNS = ['#', 'Stato', 'Pagina', 'Viewport', 'Segnalazione', 'Autore', 'Data', 'Risposte',
   'Screenshot', 'Anteprima', 'Allegati', 'Apri nel sito', 'ID'];
 var SR_COL = {};
 SR_COLUMNS.forEach(function (c, i) { SR_COL[c] = i + 1; });
@@ -86,7 +86,6 @@ function buildRow(issue, profilesById, tz, urls) {
     srSafeText(issue.body),
     srSafeText(srName(profilesById, issue.author_id)),
     srFormatDate(issue.created_at, tz),
-    (issue.plus_ones || []).length,
     srSafeText(srRepliesText(issue, profilesById, tz)),
     shot ? 'Apri' : '',
     shot ? '=IMAGE(' + srQuote(shot) + ')' : '',
@@ -115,7 +114,7 @@ var SR_BATCH = 50;
 var SR_LINK_SECONDS = 315360000;     // link alle immagini validi 10 anni
 var SR_ROW_HEIGHT = 90;              // spazio per l'anteprima dello screenshot
 var SR_START_WATERMARK = '1970-01-01T00:00:00+00:00|00000000-0000-0000-0000-000000000000';
-var SR_WIDTHS = [48, 110, 180, 110, 320, 140, 130, 48, 320, 80, 150, 220, 90, 60];
+var SR_WIDTHS = [48, 110, 180, 110, 320, 140, 130, 320, 80, 150, 220, 90, 60];
 
 /** Da eseguire una volta: crea il trigger ogni 10 minuti. */
 function installTrigger() {
@@ -145,7 +144,7 @@ function srRun_() {
     while (more && Date.now() - started < SR_MAX_RUN_MS) {
       var wm = (props.getProperty('SHEET_WATERMARK_V2') || SR_START_WATERMARK).split('|');
       var t = encodeURIComponent(wm[0]);
-      var rows = srRest_(cfg, 'get', '/rest/v1/issues?select=*,replies(*),attachments(*),plus_ones(user_id)'
+      var rows = srRest_(cfg, 'get', '/rest/v1/issues?select=*,replies(*),attachments(*)'
         + '&or=(updated_at.gt.' + t + ',and(updated_at.eq.' + t + ',id.gt.' + wm[1] + '))'
         + '&updated_at=lt.' + settled
         + '&order=updated_at.asc,id.asc&limit=' + SR_BATCH);
@@ -231,7 +230,10 @@ function srSheetFor_(cfg, props, project) {
   if (id) { try { ss = SpreadsheetApp.openById(id); } catch (e) { ss = null; } }
   if (ss) {
     if (ss.getName() !== wanted) ss.rename(wanted); // sito rinominato nella board
-    return ss.getSheets()[0];
+    var existing = ss.getSheets()[0];
+    // fogli creati prima della rimozione del +1: si toglie la colonna, i dati restano allineati
+    if (existing.getRange(1, 8).getValues()[0][0] === '+1') existing.deleteColumn(8);
+    return existing;
   }
   ss = SpreadsheetApp.create(wanted);
   props.setProperty(key, ss.getId()); // subito: un errore dopo non crea fogli doppi

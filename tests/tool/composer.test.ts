@@ -168,3 +168,15 @@ describe('chiusura dei pannelli', () => {
     expect(composer.isOpen()).toBe(false);
   });
 });
+
+describe('senza +1', () => {
+  it('né nel dettaglio né tra i doppioni', async () => {
+    const { api, composer } = setup();
+    api.getIssue.mockResolvedValueOnce({ ok: true, value: { ...makeIssue({ id: 'i1' }), replies: [], attachments: [] } });
+    await composer.openThread('i1');
+    expect([...shadow.querySelectorAll('button')].some(b => b.textContent?.startsWith('+1'))).toBe(false);
+    composer.openNew(ctx({ duplicates: [{ issue: makeIssue({ id: 'd' }), relation: 'same', sameViewport: true }] }));
+    expect([...shadow.querySelectorAll('button')].some(b => b.textContent?.startsWith('+1'))).toBe(false);
+    expect(shadow.textContent).toContain('Rispondi');
+  });
+});

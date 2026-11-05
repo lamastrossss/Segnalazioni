@@ -88,17 +88,10 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
       form.hidden = true;
       const dup = el('div', { class: 'sr-dup' }, [el('strong', { text: 'Già segnalato qui' })]);
       for (const d of ctx.duplicates) {
-        const plus = el('button', { class: 'sr-btn sr-ghost', text: `+1 (${d.issue.plus_ones.length})`, attrs: { type: 'button' } });
-        plus.addEventListener('click', async () => {
-          const me = deps.me();
-          if (!me) return;
-          const r = await api.togglePlusOne(d.issue.id, me.id);
-          if (r.ok) { deps.onChanged(d.issue.id); close(); }
-        });
         dup.append(el('div', { class: 'sr-dup-item' }, [
           el('div', {}, [el('strong', { text: `#${d.issue.number} ` }), d.issue.body.slice(0, DUP_TEXT)]),
           el('div', { class: 'sr-muted', text: `${author(d.issue.author_id)} · ${VIEWPORT_LABEL[d.issue.viewport_class]}` }),
-          el('div', { class: 'sr-row' }, [plus,
+          el('div', { class: 'sr-row' }, [
             el('button', { class: 'sr-btn sr-ghost', text: 'Rispondi', attrs: { type: 'button' }, on: { click: () => void openThread(d.issue.id) } })]),
         ]));
       }
@@ -171,13 +164,7 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
     });
 
     const mine = !!me && me.id === issue.author_id;
-    const plus = el('button', { class: 'sr-btn sr-ghost', text: `+1 (${issue.plus_ones.length})`, attrs: { type: 'button' } });
-    plus.addEventListener('click', async () => {
-      if (!me) return;
-      const r = await api.togglePlusOne(issue.id, me.id);
-      if (r.ok) { deps.onChanged(issue.id); void openThread(issue.id); } else err.textContent = r.error.message;
-    });
-    const actions: Node[] = [plus];
+    const actions: Node[] = [];
     if (mine && !issue.deleted_at) {
       actions.push(el('button', { class: 'sr-btn sr-danger', text: 'Elimina', attrs: { type: 'button' }, on: { click: async () => {
         if (!confirm('Eliminare la segnalazione? Verrà tolta anche dall’archivio su Fogli Google.')) return;
@@ -237,7 +224,7 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
     const p = el('div', { class: 'sr sr-panel sr-thread', attrs: { 'data-issue': issue.id } }, [
       header(`#${issue.number}`, [status]),
       issue.deleted_at ? el('p', { class: 'sr-error-text', text: 'Segnalazione eliminata.' }) : '',
-      body, el('div', { class: 'sr-row' }, actions), ...(deps.threadExtras?.(issue) ?? []), replies,
+      body, actions.length ? el('div', { class: 'sr-row' }, actions) : '', ...(deps.threadExtras?.(issue) ?? []), replies,
       replyText, picker.element, err, send,
     ]);
     mount(p);

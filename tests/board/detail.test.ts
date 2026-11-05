@@ -21,7 +21,7 @@ describe('dettaglio nella board', () => {
     const btn = [...shadow.querySelectorAll('button')].find(b => b.textContent === 'Apri nel sito')!;
     btn.click();
     expect(open).toHaveBeenCalledWith('https://x.myshopify.com/p?v=1#stage-review=i1', '_blank', 'noopener');
-    expect(shadow.textContent).toContain('Poi clicca Revisiona nei preferiti');
+    expect(shadow.textContent).toContain('Poi apri Stage Review dall’icona dell’estensione (o Alt+Shift+R) per vedere il pin.');
     await flush();
   });
 });

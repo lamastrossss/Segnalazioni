@@ -82,7 +82,7 @@ function row(i: Issue) {
         el('span', { class: 'chip', text: `${VIEWPORT_LABEL[i.viewport_class]} ${i.viewport_width}` }),
         el('span', { class: 'chip', text: i.page_path }),
       ]),
-      el('p', { class: 'muted', text: `${profilesById.get(i.author_id)?.name ?? 'Utente'} · +1: ${i.plus_ones.length} · risposte: ${i.replies_count}` }),
+      el('p', { class: 'muted', text: `${profilesById.get(i.author_id)?.name ?? 'Utente'} · risposte: ${i.replies_count}` }),
     ]),
   ])]);
 }

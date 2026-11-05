@@ -17,7 +17,7 @@ function seed(body: string, selector: string, tag: string, text: string, author 
     viewport_class: vc, viewport_width: vc === 'desktop' ? 1440 : 375, browser: 'Chrome', body, status: 'open', author_id: author,
     anchor: { selector, tag, text, offset: { x: 0.2, y: 0.5 }, page: { x: 200, y: 200, docHeight: 2000 } },
     screenshot_path: null, screenshot_bytes: 0, created_at: now(), updated_at: now(), deleted_at: null, deleted_by: null,
-    plus_ones: [], replies_count: 0, replies: [], attachments: [] });
+    replies_count: 0, replies: [], attachments: [] });
 }
 const path = location.pathname.replace(/\/+$/, '') || '/';
 seed('Titolo troppo vicino all’immagine: aumentare il gap a 48px', 'body > div:nth-of-type(1) > div:nth-of-type(1) > h1:nth-of-type(1)', 'H1', 'Opuntia Oil Mask');
@@ -31,7 +31,7 @@ const api = {
   createIssue: async (input: any) => {
     const id = `i${++n}`;
     const d: IssueDetail = { ...input, id, number: n, status: 'open', author_id: me.id, screenshot_path: null, screenshot_bytes: 0,
-      created_at: now(), updated_at: now(), deleted_at: null, deleted_by: null, plus_ones: [], replies_count: 0, replies: [], attachments: [] };
+      created_at: now(), updated_at: now(), deleted_at: null, deleted_by: null, replies_count: 0, replies: [], attachments: [] };
     issues.set(id, d);
     return { ok: true as const, value: { issue: strip(d), failed: [] } };
   },
@@ -44,7 +44,6 @@ const api = {
   setStatus: async (id: string, s: Issue['status']) => { issues.get(id)!.status = s; return { ok: true as const, value: undefined }; },
   softDeleteIssue: async (id: string) => { issues.get(id)!.deleted_at = now(); return { ok: true as const, value: undefined }; },
   softDeleteReply: () => ok(undefined),
-  togglePlusOne: async (id: string, uid: string) => { const d = issues.get(id)!; const i = d.plus_ones.indexOf(uid); if (i >= 0) d.plus_ones.splice(i, 1); else d.plus_ones.push(uid); return { ok: true as const, value: i < 0 }; },
   signedUrl: (p: string) => ok(p), profiles: () => ok([me, marco]),
   archiveStatus: () => ok({ last_run_at: null, last_ok_at: null, last_error: null }), totalUsageBytes: () => ok(0),
 } as unknown as Api;

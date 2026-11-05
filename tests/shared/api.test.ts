@@ -9,7 +9,7 @@ const input: NewIssue = {
   browser: 'Chrome', anchor: { selector: 'h2', tag: 'H2', text: '', offset: { x: 0, y: 0 }, page: { x: 0, y: 0, docHeight: 0 } }, body: 'ciao',
 };
 const issueRow = { id: 'i1', number: 1, ...input, status: 'open', author_id: 'u1', screenshot_path: null,
-  screenshot_bytes: 0, created_at: 't', updated_at: 't', deleted_at: null, deleted_by: null, plus_ones: [], replies: [] };
+  screenshot_bytes: 0, created_at: 't', updated_at: 't', deleted_at: null, deleted_by: null, replies: [] };
 
 function setup() {
   const fake = createFakeSupabase();
@@ -53,11 +53,10 @@ describe('createIssue', () => {
 });
 
 describe('altre operazioni', () => {
-  it('listIssues esclude le eliminate e calcola +1 e risposte', async () => {
+  it('listIssues esclude le eliminate e conta le risposte', async () => {
     const { fake, api } = setup();
-    fake.on('issues:select', () => ({ data: [{ ...issueRow, plus_ones: [{ user_id: 'u2' }], replies: [{ id: 'r1', deleted_at: null }, { id: 'r2', deleted_at: 'x' }] }], error: null }));
+    fake.on('issues:select', () => ({ data: [{ ...issueRow, replies: [{ id: 'r1', deleted_at: null }, { id: 'r2', deleted_at: 'x' }] }], error: null }));
     const r = await api.listIssues('p1');
-    expect(r.ok && r.value[0].plus_ones).toEqual(['u2']);
     expect(r.ok && r.value[0].replies_count).toBe(1);
     expect(fake.calls[0].filters).toContainEqual(['is', 'deleted_at', null]);
   });
@@ -66,15 +65,6 @@ describe('altre operazioni', () => {
     fake.on('issues:update', () => ({ data: [], error: null }));
     const r = await api.setStatus('i1', 'resolved');
     expect(r.ok === false && r.error.kind).toBe('forbidden');
-  });
-  it('togglePlusOne aggiunge e toglie', async () => {
-    const { fake, api } = setup();
-    fake.on('plus_ones:select', () => ({ data: null, error: null }));
-    fake.on('plus_ones:insert', () => ({ data: null, error: null }));
-    expect(await api.togglePlusOne('i1', 'u1')).toEqual({ ok: true, value: true });
-    fake.on('plus_ones:select', () => ({ data: { user_id: 'u1' }, error: null }));
-    fake.on('plus_ones:delete', () => ({ data: null, error: null }));
-    expect(await api.togglePlusOne('i1', 'u1')).toEqual({ ok: true, value: false });
   });
   it('findProjectByDomain normalizza il dominio', async () => {
     const { fake, api } = setup();

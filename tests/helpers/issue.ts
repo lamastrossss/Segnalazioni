@@ -7,7 +7,7 @@ export function makeIssue(over: Partial<Issue> & { id: string }): Issue {
     anchor: { selector: 'h2', tag: 'H2', text: '', offset: { x: 0, y: 0 }, page: { x: 0, y: 0, docHeight: 1000 } },
     body: 'testo', status: 'open', author_id: 'u1', screenshot_path: null, screenshot_bytes: 0,
     created_at: '2026-11-04T09:00:00Z', updated_at: '2026-11-04T09:00:00Z',
-    deleted_at: null, deleted_by: null, plus_ones: [], replies_count: 0,
+    deleted_at: null, deleted_by: null, replies_count: 0,
     ...over,
   };
 }

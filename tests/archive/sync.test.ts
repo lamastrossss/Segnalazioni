@@ -16,6 +16,7 @@ class Sheet {
   setColumnWidth() { return this; }
   setRowHeight(r: number, h: number) { this.heights.set(r, h); return this; }
   deleteRow(r: number) { this.rows.splice(r - 1, 1); return this; }
+  deleteColumn(c: number) { this.rows.forEach(row => row.splice(c - 1, 1)); this.hidden = this.hidden.map(h => (h > c ? h - 1 : h)); return this; }
   getRange(r: number, c: number, nr = 1, nc = 1) {
     const sheet = this;
     return {
@@ -112,10 +113,10 @@ const issue = (over: Row = {}): Row => ({
   id: 'i1', project_id: 'p1', number: 1, page_path: '/p', page_url: 'https://x/p', viewport_class: 'mobile', viewport_width: 375,
   body: 'Titolo troppo vicino', status: 'open', author_id: 'u1', screenshot_path: 'p1/i1/screenshot.jpg',
   created_at: '2026-11-04T09:00:00.000001+00:00', updated_at: '2026-11-04T09:00:00.000001+00:00',
-  deleted_at: null, deleted_by: null, plus_ones: [], attachments: [], replies: [], ...over,
+  deleted_at: null, deleted_by: null, attachments: [], replies: [], ...over,
 });
 const sheetOf = (env: ReturnType<typeof makeEnv>) => [...env.sheets.values()][0].getSheets()[0];
-const ids = (s: Sheet) => s.rows.slice(1).map(r => r[13]);
+const ids = (s: Sheet) => s.rows.slice(1).map(r => r[12]);
 
 describe('archivio su Fogli Google', () => {
   it('crea il foglio del sito con intestazione e una riga per segnalazione', () => {
@@ -128,9 +129,9 @@ describe('archivio su Fogli Google', () => {
     expect(s.name).toBe('Segnalazioni');
     expect(s.rows[0][0]).toBe('#');
     expect(s.frozen).toBe(1);
-    expect(s.hidden).toContain(14);
+    expect(s.hidden).toContain(13);
     expect(ids(s)).toEqual(['i1', 'i2']);
-    expect(s.rows[1][10]).toBe('=IMAGE("https://sb.test/storage/v1/object/sign/media/p1/i1/screenshot.jpg?token=t")');
+    expect(s.rows[1][9]).toBe('=IMAGE("https://sb.test/storage/v1/object/sign/media/p1/i1/screenshot.jpg?token=t")');
     expect(s.heights.get(2)).toBe(90);
     expect((env.db as any).status.last_error).toBeNull();
   });
@@ -142,10 +143,10 @@ describe('archivio su Fogli Google', () => {
     const signs = env.log.filter(l => l.path === '/storage/v1/object/sign/media');
     expect(signs).toHaveLength(1);
     expect(signs[0].body).toEqual({ expiresIn: 315360000, paths: ['p1/i1/screenshot.jpg', 'p1/i1/a1.jpg'] });
-    const rt = sheetOf(env).rich.get('2,12')!;
+    const rt = sheetOf(env).rich.get('2,11')!;
     expect(rt.text).toBe('Immagine 1');
-    expect(sheetOf(env).rich.get('2,10')).toEqual({ text: 'Apri', links: [{ start: 0, end: 4, url: 'https://sb.test/storage/v1/object/sign/media/p1/i1/screenshot.jpg?token=t' }] });
-    expect(sheetOf(env).rich.get('2,13')!.links[0].url).toBe('https://x/p#stage-review=i1');
+    expect(sheetOf(env).rich.get('2,9')).toEqual({ text: 'Apri', links: [{ start: 0, end: 4, url: 'https://sb.test/storage/v1/object/sign/media/p1/i1/screenshot.jpg?token=t' }] });
+    expect(sheetOf(env).rich.get('2,12')!.links[0].url).toBe('https://x/p#stage-review=i1');
     // RichTextValueBuilder.setLinkUrl: fine esclusiva ('Immagine 1' = 10 caratteri)
     expect(rt.links).toEqual([{ start: 0, end: 10, url: 'https://sb.test/storage/v1/object/sign/media/p1/i1/a1.jpg?token=t' }]);
   });
@@ -159,7 +160,7 @@ describe('archivio su Fogli Google', () => {
     const s = sheetOf(env);
     expect(ids(s)).toEqual(['i1', 'i2']);
     expect(s.rows[1][1]).toBe('Risolta');
-    expect(s.rows[1][8]).toBe('Marco · 04/11/2026 10:30: Fatto');
+    expect(s.rows[1][7]).toBe('Marco · 04/11/2026 10:30: Fatto');
   });
 
   it('una segnalazione eliminata sparisce dal foglio', () => {
@@ -201,8 +202,8 @@ describe('archivio su Fogli Google', () => {
     env.run();
     const s = sheetOf(env);
     expect(ids(s)).toEqual(['i1']);
-    expect(s.rows[1][9]).toBe('');
-    expect(s.rich.has('2,10')).toBe(false);
+    expect(s.rows[1][8]).toBe('');
+    expect(s.rich.has('2,9')).toBe(false);
   });
 
   it('il testo degli utenti non diventa una formula', () => {
@@ -239,6 +240,22 @@ describe('archivio su Fogli Google', () => {
     env.props.set('SHEET_WATERMARK', '2026-11-04T09:00:00.000001+00:00|i1'); // vecchio segnaposto: ignorato
     env.run();
     expect(ids(sheetOf(env))).toEqual(['i1']);
-    expect(sheetOf(env).rows[1][9]).toBe('Apri');
+    expect(sheetOf(env).rows[1][8]).toBe('Apri');
+  });
+
+  it('nei fogli già creati la colonna +1 viene tolta e i dati restano allineati', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] });
+    env.run();
+    const s = sheetOf(env);
+    // simula un foglio creato dalla versione precedente, con la colonna +1 in ottava posizione
+    s.rows.forEach((r, i) => r.splice(7, 0, i === 0 ? '+1' : 2));
+    s.hidden = [14];
+    Object.assign(env.db.issues[0], { status: 'resolved', updated_at: '2026-11-04T11:00:00+00:00' });
+    env.run();
+    expect(s.rows[0]).not.toContain('+1');
+    expect(s.rows[0][7]).toBe('Risposte');
+    expect(ids(s)).toEqual(['i1']);
+    expect(s.rows[1][1]).toBe('Risolta');
+    expect(s.hidden).toEqual([13]);
   });
 });
