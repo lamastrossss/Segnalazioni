@@ -27,10 +27,9 @@ export async function initBoard(title: string) {
   let me = (await auth.current()) ?? (await login());
 
   const header = el('header', { class: 'top' }, [
-    el('span', { class: 'logo' }),
+    el('img', { class: 'logo-img', attrs: { src: './icon.png', alt: '', width: '28', height: '28' } }),
     el('h1', { text: title }),
     el('span', { class: 'muted', text: me.name }),
-    el('a', { class: 'btn ghost', text: 'Installa il pulsante', attrs: { href: './install.html' } }),
     el('button', { class: 'btn ghost', text: 'Esci', on: { click: async () => { await client.auth.signOut(); location.reload(); } } }),
   ]);
   const main = el('div');

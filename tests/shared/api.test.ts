@@ -88,4 +88,12 @@ describe('altre operazioni', () => {
     fake.on('rpc:total_usage_bytes', () => ({ data: '1234', error: null }));
     expect(await api.totalUsageBytes()).toEqual({ ok: true, value: 1234 });
   });
+  it('renameProject salva il nome ripulito e rifiuta quello vuoto', async () => {
+    const { fake, api } = setup();
+    fake.on('projects:update', () => ({ data: [{ id: 'p1' }], error: null }));
+    expect(await api.renameProject('p1', '  Rica — Stage  ')).toEqual({ ok: true, value: undefined });
+    expect(fake.calls.at(-1)!.payload).toEqual({ name: 'Rica — Stage' });
+    const r = await api.renameProject('p1', '   ');
+    expect(r.ok === false && r.error.message).toBe('Il nome non può essere vuoto.');
+  });
 });

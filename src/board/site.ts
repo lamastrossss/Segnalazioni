@@ -1,6 +1,7 @@
 import { initBoard } from './common';
 import { filterIssues, STATUS_LABEL, type IssueFilters } from './logic';
 import { renderDetail } from './detail';
+import { renderSiteHeader } from './site-header';
 import { el } from '../shared/dom';
 import { VIEWPORT_LABEL } from '../shared/viewport';
 import type { Issue, IssueStatus, Profile, ViewportClass } from '../shared/types';
@@ -31,12 +32,9 @@ const filters: IssueFilters = {
 
 const filterBar = el('div', { class: 'filters' });
 const list = el('ul', { class: 'issues' });
-main.append(
-  el('p', {}, [el('a', { text: '← Tutti i siti', attrs: { href: './index.html' } })]),
-  el('h2', { text: project.name }),
-  el('p', { class: 'muted', text: project.domains.join(' · ') }),
-  filterBar, list,
-);
+main.append(el('p', {}, [el('a', { text: '← Tutti i siti', attrs: { href: './index.html' } })]));
+renderSiteHeader(main, { project, api, onRenamed: name => { document.title = `${name} · Stage Review`; } });
+main.append(filterBar, list);
 
 const detail = renderDetail(document.body, {
   api, me: board.me, projectId, profilesById, reauth: board.reauth,

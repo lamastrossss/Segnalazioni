@@ -105,6 +105,12 @@ export function createApi(client: SupabaseClient) {
       return ok({ id: p.value.id, name: p.value.name, archive_doc_url: p.value.archive_doc_url ?? null, domains: [domain.toLowerCase()] });
     },
 
+    async renameProject(projectId: string, name: string): Promise<Result<void>> {
+      const clean = name.trim();
+      if (!clean) return fail('unknown', 'Il nome non può essere vuoto.');
+      return updateOne('projects', projectId, { name: clean });
+    },
+
     async linkDomain(projectId: string, domain: string): Promise<Result<void>> {
       return run(client.from('project_domains').insert({ domain: domain.toLowerCase(), project_id: projectId }), () => undefined);
     },
