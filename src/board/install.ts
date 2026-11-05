@@ -35,7 +35,7 @@ const extension = el('section', { class: 'card' }, [
 ]);
 
 document.getElementById('app')!.append(
-  el('header', { class: 'top' }, [el('img', { class: 'logo-img', attrs: { src: './icon.png', alt: '', width: '28', height: '28' } }), el('h1', { text: 'Installa Stage Review' }),
+  el('header', { class: 'top' }, [el('img', { class: 'logo-img', attrs: { src: './icon.png', alt: '', width: '32', height: '32' } }), el('h1', { text: 'Installa Stage Review' }),
     el('a', { class: 'btn ghost', text: 'Vai alla board', attrs: { href: './index.html' } })]),
   el('div', { class: 'stack' }, [extension]),
 );

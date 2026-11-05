@@ -27,7 +27,7 @@ export async function initBoard(title: string) {
   let me = (await auth.current()) ?? (await login());
 
   const header = el('header', { class: 'top' }, [
-    el('img', { class: 'logo-img', attrs: { src: './icon.png', alt: '', width: '28', height: '28' } }),
+    el('img', { class: 'logo-img', attrs: { src: './icon.png', alt: '', width: '32', height: '32' } }),
     el('h1', { text: title }),
     el('span', { class: 'muted', text: me.name }),
     el('button', { class: 'btn ghost', text: 'Esci', on: { click: async () => { await client.auth.signOut(); location.reload(); } } }),
