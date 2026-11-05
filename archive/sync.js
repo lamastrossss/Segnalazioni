@@ -53,7 +53,7 @@ function srRun_() {
   var error = null;
   try {
     var profiles = srIndex_(srRest_(cfg, 'get', '/rest/v1/profiles?select=id,name'));
-    var projects = srIndex_(srRest_(cfg, 'get', '/rest/v1/projects?select=id,name,archive_doc_url'));
+    var projects = srIndex_(srRest_(cfg, 'get', '/rest/v1/projects?select=id,name,archive_doc_url,deleted_at'));
     srPrepareSheets_(cfg, props, projects);
     var settled = encodeURIComponent(new Date(Date.now() - SR_SETTLE_MS).toISOString());
     var more = true;
@@ -68,7 +68,7 @@ function srRun_() {
         if (Date.now() - started > SR_MAX_RUN_MS) { more = false; break; }
         var issue = rows[i];
         if (!profiles[issue.author_id]) profiles = srIndex_(srRest_(cfg, 'get', '/rest/v1/profiles?select=id,name'));
-        if (!projects[issue.project_id]) projects = srIndex_(srRest_(cfg, 'get', '/rest/v1/projects?select=id,name,archive_doc_url'));
+        if (!projects[issue.project_id]) projects = srIndex_(srRest_(cfg, 'get', '/rest/v1/projects?select=id,name,archive_doc_url,deleted_at'));
         srWriteIssue_(cfg, props, projects[issue.project_id], issue, profiles);
         SpreadsheetApp.flush(); // salvato prima di far avanzare il segnaposto
         props.setProperty('SHEET_WATERMARK_V2', issue.updated_at + '|' + issue.id);
@@ -210,7 +210,17 @@ function srStatusRule_() {
 /** A ogni giro: ogni foglio già creato ha l'ascoltatore e il menu dello Stato su tutte le righe. */
 function srPrepareSheets_(cfg, props, projects) {
   Object.keys(projects).forEach(function (pid) {
-    if (!props.getProperty('sheet:' + pid)) return;
+    var sheetId = props.getProperty('sheet:' + pid);
+    if (!sheetId) return;
+    if (projects[pid].deleted_at) {
+      // sito eliminato nella board: foglio nel Cestino di Drive (recuperabile), niente più aggiornamenti
+      try { DriveApp.getFileById(sheetId).setTrashed(true); } catch (e) { /* già cancellato */ }
+      ScriptApp.getProjectTriggers().forEach(function (t) {
+        if (t.getHandlerFunction() === 'onStatoEdit' && t.getTriggerSourceId() === sheetId) ScriptApp.deleteTrigger(t);
+      });
+      props.deleteProperty('sheet:' + pid);
+      return;
+    }
     var sheet = srSheetFor_(cfg, props, projects[pid]);
     var last = sheet.getLastRow();
     if (last >= 2) sheet.getRange(2, SR_COL.Stato, last - 1, 1).setDataValidation(srStatusRule_());
@@ -227,7 +237,7 @@ function srFindRow_(sheet, issueId) {
 }
 
 function srWriteIssue_(cfg, props, project, issue, profiles) {
-  if (!project) return;
+  if (!project || project.deleted_at) return;
   var key = 'sheet:' + project.id;
   if (issue.deleted_at) {
     // eliminata: se è nel foglio la togliamo, altrimenti non serve nemmeno creare il foglio

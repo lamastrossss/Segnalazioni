@@ -70,3 +70,5 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .site-delete p { margin: 0; }
 .site-delete label { display: grid; gap: 6px; }
 .site-delete input { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+
+.error:empty { display: none; }

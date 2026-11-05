@@ -374,4 +374,18 @@ describe('archivio su Fogli Google', () => {
     const fresh = [...env.sheets.values()][1].getSheets()[0];
     expect(fresh.rows.slice(1).map(r => r[12])).toEqual(['n1']);
   });
+
+  it('un sito eliminato: il suo foglio va nel Cestino e le sue segnalazioni non vengono più scritte', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }, { id: 'p2', name: 'Altro' }], profiles,
+      issues: [issue(), issue({ id: 'i9', project_id: 'p2', updated_at: '2026-11-04T09:10:00+00:00' })] });
+    env.run();
+    const rica = [...env.sheets.values()].find(x => x.getName() === 'Stage Review — Rica')!;
+    env.db.projects[0].deleted_at = '2026-11-05T10:00:00+00:00';
+    Object.assign(env.db.issues[0], { status: 'resolved', updated_at: '2026-11-04T11:00:00+00:00' });
+    env.run();
+    expect(env.trashed).toEqual([rica.getId()]);
+    expect(env.props.has('sheet:p1')).toBe(false);
+    expect(env.triggers.map(t => t.source)).not.toContain(rica.getId());
+    expect(rica.getSheets()[0].rows[1][1]).toBe('Aperta'); // non riscritto
+  });
 });
