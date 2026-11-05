@@ -47,6 +47,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .sr-field { display: block; margin-bottom: 10px; }
 .sr-field span { display: block; font-size: 12px; color: #555; margin-bottom: 4px; }
 .sr input, .sr textarea, .sr select { width: 100%; font: inherit; color: #111; padding: 8px 10px; border: 1px solid #D5D5D5; border-radius: 8px; background: #fff; }
+.sr select { cursor: pointer; appearance: none; -webkit-appearance: none; padding-right: 38px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23111' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center; background-size: 12px 12px; }
+.sr-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.sr-panel-head h2 { margin: 0; }
+.sr-panel-tools { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sr-panel-tools select { width: auto; min-width: 150px; }
+.sr-close { flex: none; width: 32px; height: 32px; border-radius: 8px; font-size: 22px; line-height: 1; color: #555; display: grid; place-items: center; }
+.sr-close:hover { background: #F1F1F1; color: #111; }
 .sr textarea { min-height: 90px; resize: vertical; }
 .sr-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
 .sr-tabs button { padding: 6px 10px; border-radius: 8px; }

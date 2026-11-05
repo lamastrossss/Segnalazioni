@@ -148,3 +148,23 @@ describe('thread live', () => {
     expect(shadow.querySelector('textarea')!.value).toBe('sto scrivendo');
   });
 });
+
+describe('chiusura dei pannelli', () => {
+  it('il dettaglio ha una × in alto con nome accessibile e niente pulsante "Chiudi"', async () => {
+    const { api, composer } = setup();
+    api.getIssue.mockResolvedValueOnce({ ok: true, value: { ...makeIssue({ id: 'i1' }), replies: [], attachments: [] } });
+    await composer.openThread('i1');
+    const x = shadow.querySelector<HTMLButtonElement>('.sr-panel-head .sr-close')!;
+    expect(x.textContent).toBe('×');
+    expect(x.getAttribute('aria-label')).toBe('Chiudi');
+    expect([...shadow.querySelectorAll('button')].some(b => b.textContent === 'Chiudi')).toBe(false);
+    x.click();
+    expect(composer.isOpen()).toBe(false);
+  });
+  it('anche la nuova segnalazione si chiude con la ×', () => {
+    const { composer } = setup();
+    composer.openNew(ctx());
+    shadow.querySelector<HTMLButtonElement>('.sr-close')!.click();
+    expect(composer.isOpen()).toBe(false);
+  });
+});

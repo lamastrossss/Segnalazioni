@@ -58,9 +58,10 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
   }
 
   function header(title: string, extra: (Node | string)[] = []) {
-    return el('div', { class: 'sr-row', attrs: { style: 'justify-content:space-between' } }, [
-      el('h2', { text: title, attrs: { style: 'margin:0' } }),
-      el('div', { class: 'sr-row' }, [...extra, el('button', { class: 'sr-btn sr-ghost', text: 'Chiudi', attrs: { type: 'button' }, on: { click: close } })]),
+    return el('div', { class: 'sr-panel-head' }, [
+      el('h2', { text: title }),
+      el('div', { class: 'sr-panel-tools' }, [...extra,
+        el('button', { class: 'sr-close', text: '×', attrs: { type: 'button', 'aria-label': 'Chiudi', title: 'Chiudi' }, on: { click: close } })]),
     ]);
   }
 
@@ -179,7 +180,7 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
     const actions: Node[] = [plus];
     if (mine && !issue.deleted_at) {
       actions.push(el('button', { class: 'sr-btn sr-danger', text: 'Elimina', attrs: { type: 'button' }, on: { click: async () => {
-        if (!confirm('Eliminare la segnalazione? Resterà nell’archivio.')) return;
+        if (!confirm('Eliminare la segnalazione? Verrà tolta anche dall’archivio su Fogli Google.')) return;
         const r = await withReauth(() => api.softDeleteIssue(issue.id), m => { err.textContent = m; });
         if (r.ok) { deps.onChanged(issue.id); close(); }
       } } }));
@@ -206,7 +207,7 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
       images(row, rep.attachments);
       if (me && rep.author_id === me.id) {
         row.append(el('button', { class: 'sr-btn sr-ghost', text: 'Elimina risposta', attrs: { type: 'button' }, on: { click: async () => {
-          if (!confirm('Eliminare la risposta? Resterà nell’archivio.')) return;
+          if (!confirm('Eliminare la risposta?')) return;
           const r = await withReauth(() => api.softDeleteReply(rep.id), m => { err.textContent = m; });
           if (r.ok) { deps.onChanged(issue.id); void openThread(issue.id); }
         } } }));

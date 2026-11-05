@@ -151,9 +151,9 @@ export function createSession(ctx: SessionCtx) {
   function toggleList() {
     if (listPanel) { listPanel.remove(); listPanel = null; return; }
     listPanel = el('div', { class: 'sr sr-panel sr-list-panel' }, [
-      el('div', { class: 'sr-row' }, [
+      el('div', { class: 'sr-panel-head' }, [
         el('h2', { text: 'Segnalazioni della pagina' }),
-        el('button', { class: 'sr-btn sr-ghost', text: 'Chiudi', on: { click: () => toggleList() } }),
+        el('button', { class: 'sr-close', text: '×', attrs: { type: 'button', 'aria-label': 'Chiudi', title: 'Chiudi' }, on: { click: () => toggleList() } }),
       ]),
       el('ul', { class: 'sr-list' }),
     ]);
