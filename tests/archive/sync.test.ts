@@ -81,7 +81,7 @@ function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: 
   const ctx: Record<string, unknown> = {
     PropertiesService: { getScriptProperties: () => ({
       getProperty: (k: string) => props.get(k) ?? null,
-      setProperty: (k: string, v: string) => { if (k === 'SHEET_WATERMARK') events.push('wm'); props.set(k, v); },
+      setProperty: (k: string, v: string) => { if (k === 'SHEET_WATERMARK_V2') events.push('wm'); props.set(k, v); },
       getProperties: () => Object.fromEntries(props),
     }) },
     UrlFetchApp: { fetch },
@@ -144,6 +144,8 @@ describe('archivio su Fogli Google', () => {
     expect(signs[0].body).toEqual({ expiresIn: 315360000, paths: ['p1/i1/screenshot.jpg', 'p1/i1/a1.jpg'] });
     const rt = sheetOf(env).rich.get('2,12')!;
     expect(rt.text).toBe('Immagine 1');
+    expect(sheetOf(env).rich.get('2,10')).toEqual({ text: 'Apri', links: [{ start: 0, end: 4, url: 'https://sb.test/storage/v1/object/sign/media/p1/i1/screenshot.jpg?token=t' }] });
+    expect(sheetOf(env).rich.get('2,13')!.links[0].url).toBe('https://x/p#stage-review=i1');
     // RichTextValueBuilder.setLinkUrl: fine esclusiva ('Immagine 1' = 10 caratteri)
     expect(rt.links).toEqual([{ start: 0, end: 10, url: 'https://sb.test/storage/v1/object/sign/media/p1/i1/a1.jpg?token=t' }]);
   });
@@ -200,6 +202,7 @@ describe('archivio su Fogli Google', () => {
     const s = sheetOf(env);
     expect(ids(s)).toEqual(['i1']);
     expect(s.rows[1][9]).toBe('');
+    expect(s.rich.has('2,10')).toBe(false);
   });
 
   it('il testo degli utenti non diventa una formula', () => {
@@ -228,6 +231,14 @@ describe('archivio su Fogli Google', () => {
     const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] }, { failIssues: true });
     expect(() => env.run()).toThrow(/boom/);
     expect((env.db as any).status.last_error).toMatch(/500/);
-    expect(env.props.get('SHEET_WATERMARK')).toBeUndefined();
+    expect(env.props.get('SHEET_WATERMARK_V2')).toBeUndefined();
+  });
+
+  it('i fogli scritti dalla versione con le formule vengono riscritti per intero', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] });
+    env.props.set('SHEET_WATERMARK', '2026-11-04T09:00:00.000001+00:00|i1'); // vecchio segnaposto: ignorato
+    env.run();
+    expect(ids(sheetOf(env))).toEqual(['i1']);
+    expect(sheetOf(env).rows[1][9]).toBe('Apri');
   });
 });

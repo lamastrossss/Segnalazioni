@@ -33,10 +33,6 @@ function srSafeText(s) {
 
 function srQuote(s) { return '"' + String(s).replace(/"/g, '""') + '"'; }
 
-function srLink(url, label) {
-  return url ? '=HYPERLINK(' + srQuote(url) + ',' + srQuote(label) + ')' : '';
-}
-
 function srFocusUrl(issue) {
   return String(issue.page_url).split('#')[0] + '#stage-review=' + issue.id;
 }
@@ -72,12 +68,15 @@ function srRepliesText(issue, profilesById, tz) {
 
 /**
  * Riga del foglio per una segnalazione. urls: { <percorso storage>: link firmato }.
- * Restituisce i valori (formule in sintassi inglese con le virgole, come vuole Apps Script)
- * e i link degli allegati da mettere come testo con collegamenti nella colonna Allegati.
+ * I link sono testo collegato ("Apri"), non formule HYPERLINK: le formule con più parametri
+ * dipendono dalla lingua del foglio (in italiano il separatore è ";").
+ * L'unica formula è IMAGE, con un solo parametro, che funziona in ogni lingua.
+ * Restituisce i valori e, per le colonne con link, le parti da collegare.
  */
 function buildRow(issue, profilesById, tz, urls) {
   var shot = issue.screenshot_path ? urls[issue.screenshot_path] || null : null;
   var attachments = srAttachmentLinks(issue, profilesById, urls);
+  var site = srFocusUrl(issue);
   var values = [
     issue.number,
     SR_STATUS[issue.status] || issue.status,
@@ -88,13 +87,17 @@ function buildRow(issue, profilesById, tz, urls) {
     srFormatDate(issue.created_at, tz),
     (issue.plus_ones || []).length,
     srSafeText(srRepliesText(issue, profilesById, tz)),
-    srLink(shot, 'Apri'),
+    shot ? 'Apri' : '',
     shot ? '=IMAGE(' + srQuote(shot) + ')' : '',
     attachments.map(function (a) { return a.label; }).join(', '),
-    srLink(srFocusUrl(issue), 'Apri'),
+    'Apri',
     issue.id,
   ];
-  return { values: values, attachments: attachments };
+  var links = [];
+  if (shot) links.push({ col: SR_COL.Screenshot, parts: [{ label: 'Apri', url: shot }] });
+  if (attachments.some(function (a) { return a.url; })) links.push({ col: SR_COL.Allegati, parts: attachments });
+  links.push({ col: SR_COL['Apri nel sito'], parts: [{ label: 'Apri', url: site }] });
+  return { values: values, links: links };
 }
 
 if (typeof module !== 'undefined') {

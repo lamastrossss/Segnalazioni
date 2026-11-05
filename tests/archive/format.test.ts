@@ -17,14 +17,27 @@ describe('riga del foglio', () => {
     expect(SR_COLUMNS).toEqual(['#', 'Stato', 'Pagina', 'Viewport', 'Segnalazione', 'Autore', 'Data', '+1', 'Risposte',
       'Screenshot', 'Anteprima', 'Allegati', 'Apri nel sito', 'ID']);
   });
-  it('valori, anteprima e link (formule con le virgole)', () => {
-    const { values } = buildRow(iss, profiles, 'Europe/Rome', urls);
+
+  it('valori e link come testo collegato (niente formule con più parametri: il foglio è in italiano)', () => {
+    const { values, links } = buildRow(iss, profiles, 'Europe/Rome', urls);
     expect(values).toEqual([
       42, 'In lavorazione', '/products/opuntia', 'Mobile 375', 'Titolo troppo vicino', 'Alessandra', '04/11/2026 10:12', 1, '',
-      '=HYPERLINK("https://sb/shot?token=a","Apri")', '=IMAGE("https://sb/shot?token=a")', '',
-      '=HYPERLINK("https://x.myshopify.com/products/opuntia?v=1#stage-review=i1","Apri")', 'i1',
+      'Apri', '=IMAGE("https://sb/shot?token=a")', '', 'Apri', 'i1',
+    ]);
+    expect(links).toEqual([
+      { col: 10, parts: [{ label: 'Apri', url: 'https://sb/shot?token=a' }] },
+      { col: 13, parts: [{ label: 'Apri', url: 'https://x.myshopify.com/products/opuntia?v=1#stage-review=i1' }] },
     ]);
   });
+
+  it('nessuna formula ha separatori fuori dalle virgolette (funziona con ogni lingua del foglio)', () => {
+    const { values } = buildRow({ ...iss, page_url: 'https://x.com/p?a=1,2' }, profiles, 'Europe/Rome',
+      { ...urls, 'p/i1/screenshot.jpg': 'https://sb/s?x=1,2;3' });
+    for (const v of values) {
+      if (typeof v === 'string' && v.startsWith('=')) expect(v.replace(/"(?:[^"]|"")*"/g, '')).not.toMatch(/[,;]/);
+    }
+  });
+
   it('risposte (non eliminate) e allegati etichettati', () => {
     const issue = {
       ...iss,
@@ -38,17 +51,21 @@ describe('riga del foglio', () => {
         { id: 'del', path: 'p/i1/del.jpg', reply_id: null, created_at: '3', deleted_at: 'x' },
       ],
     };
-    const { values, attachments } = buildRow(issue, profiles, 'Europe/Rome', urls);
+    const { values, links } = buildRow(issue, profiles, 'Europe/Rome', urls);
     expect(values[8]).toBe('Marco · 04/11/2026 10:30: Fatto');
     expect(values[11]).toBe('Immagine 1, Risposta di Marco 1');
-    expect(attachments).toEqual([{ label: 'Immagine 1', url: 'https://sb/a1' }, { label: 'Risposta di Marco 1', url: 'https://sb/r1' }]);
+    expect(links.find((l: any) => l.col === 12)).toEqual({ col: 12, parts: [
+      { label: 'Immagine 1', url: 'https://sb/a1' }, { label: 'Risposta di Marco 1', url: 'https://sb/r1' }] });
     expect(srImagePaths(issue)).toEqual(['p/i1/screenshot.jpg', 'p/i1/a1.jpg', 'p/i1/r1.jpg']);
   });
-  it('senza screenshot: celle vuote', () => {
-    const { values } = buildRow({ ...iss, screenshot_path: null }, profiles, 'Europe/Rome', {});
+
+  it('senza screenshot: celle vuote e nessun link', () => {
+    const { values, links } = buildRow({ ...iss, screenshot_path: null }, profiles, 'Europe/Rome', {});
     expect(values[9]).toBe('');
     expect(values[10]).toBe('');
+    expect(links.map((l: any) => l.col)).toEqual([13]);
   });
+
   it('il testo degli utenti non diventa mai una formula', () => {
     expect(srSafeText('=IMPORTXML("http://x")')).toBe('\'=IMPORTXML("http://x")');
     expect(srSafeText('+39 333')).toBe("'+39 333");
@@ -58,8 +75,9 @@ describe('riga del foglio', () => {
     const { values } = buildRow({ ...iss, body: '=HYPERLINK("http://evil","x")' }, profiles, 'Europe/Rome', urls);
     expect(values[4]).toBe('\'=HYPERLINK("http://evil","x")');
   });
-  it('le virgolette negli URL vengono raddoppiate nelle formule', () => {
-    const { values } = buildRow({ ...iss, page_url: 'https://x.com/p?q="a"' }, profiles, 'Europe/Rome', urls);
-    expect(values[12]).toBe('=HYPERLINK("https://x.com/p?q=""a""#stage-review=i1","Apri")');
+
+  it('le virgolette negli URL vengono raddoppiate nella formula IMAGE', () => {
+    const { values } = buildRow(iss, profiles, 'Europe/Rome', { 'p/i1/screenshot.jpg': 'https://sb/s?q="a"' });
+    expect(values[10]).toBe('=IMAGE("https://sb/s?q=""a""")');
   });
 });

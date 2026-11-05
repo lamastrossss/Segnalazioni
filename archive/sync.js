@@ -36,7 +36,7 @@ function srRun_() {
     var settled = encodeURIComponent(new Date(Date.now() - SR_SETTLE_MS).toISOString());
     var more = true;
     while (more && Date.now() - started < SR_MAX_RUN_MS) {
-      var wm = (props.getProperty('SHEET_WATERMARK') || SR_START_WATERMARK).split('|');
+      var wm = (props.getProperty('SHEET_WATERMARK_V2') || SR_START_WATERMARK).split('|');
       var t = encodeURIComponent(wm[0]);
       var rows = srRest_(cfg, 'get', '/rest/v1/issues?select=*,replies(*),attachments(*),plus_ones(user_id)'
         + '&or=(updated_at.gt.' + t + ',and(updated_at.eq.' + t + ',id.gt.' + wm[1] + '))'
@@ -49,7 +49,7 @@ function srRun_() {
         if (!projects[issue.project_id]) projects = srIndex_(srRest_(cfg, 'get', '/rest/v1/projects?select=id,name,archive_doc_url'));
         srWriteIssue_(cfg, props, projects[issue.project_id], issue, profiles);
         SpreadsheetApp.flush(); // salvato prima di far avanzare il segnaposto
-        props.setProperty('SHEET_WATERMARK', issue.updated_at + '|' + issue.id);
+        props.setProperty('SHEET_WATERMARK_V2', issue.updated_at + '|' + issue.id);
       }
       if (rows.length < SR_BATCH) more = false;
     }
@@ -167,16 +167,15 @@ function srWriteIssue_(cfg, props, project, issue, profiles) {
   if (row < 0) row = sheet.getLastRow() + 1;
   sheet.getRange(row, 1, 1, SR_COLUMNS.length).setValues([built.values]);
 
-  var linked = built.attachments.filter(function (a) { return a.url; });
-  if (linked.length) {
-    var text = built.attachments.map(function (a) { return a.label; }).join(', ');
+  built.links.forEach(function (spec) {
+    var text = spec.parts.map(function (p) { return p.label; }).join(', ');
     var rt = SpreadsheetApp.newRichTextValue().setText(text);
     var pos = 0;
-    built.attachments.forEach(function (a) {
-      if (a.url) rt.setLinkUrl(pos, pos + a.label.length, a.url);
-      pos += a.label.length + 2;
+    spec.parts.forEach(function (p) {
+      if (p.url) rt.setLinkUrl(pos, pos + p.label.length, p.url); // fine esclusiva
+      pos += p.label.length + 2;
     });
-    sheet.getRange(row, SR_COL.Allegati).setRichTextValue(rt.build());
-  }
+    sheet.getRange(row, spec.col).setRichTextValue(rt.build());
+  });
   if (built.values[SR_COL.Anteprima - 1]) sheet.setRowHeight(row, SR_ROW_HEIGHT);
 }
