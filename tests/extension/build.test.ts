@@ -11,7 +11,8 @@ describe('pacchetto dell\'estensione', () => {
     execFileSync(process.execPath, [p('scripts/build-extension.mjs')], { cwd: root });
     expect(existsSync(p('dist/stage-review-estensione/manifest.json'))).toBe(true);
     expect(existsSync(p('dist/stage-review-estensione/lib/core.d.ts'))).toBe(false);
-    expect(JSON.parse(readFileSync(p('dist/extension-version.json'), 'utf8'))).toEqual({ version: '1.0.0' });
+    const { version } = JSON.parse(readFileSync(p('extension/manifest.json'), 'utf8'));
+    expect(JSON.parse(readFileSync(p('dist/extension-version.json'), 'utf8'))).toEqual({ version });
     const list = execFileSync('unzip', ['-l', p('dist/stage-review-estensione.zip')]).toString();
     for (const f of ['manifest.json', 'background.js', 'bridge.js', 'popup.html', 'popup.js', 'popup.css', 'config.js', 'lib/core.js', 'lib/popup.js', 'icons/icon128.png']) {
       expect(list).toContain(`stage-review-estensione/${f}`);

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Stage Review",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Segnalazioni con pin, screenshot e viewport direttamente sugli stage — The Wave Studio.",
   "permissions": ["activeTab", "scripting"],
   "optional_host_permissions": ["https://*/*", "http://*/*"],

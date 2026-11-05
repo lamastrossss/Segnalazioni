@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Stage Review — "Pagina con pin". Sorgente di riferimento; i PNG li genera scripts/make-icons.py -->
+  <rect x="5" y="5" width="118" height="118" rx="28" fill="#ffffff" stroke="#E2E2E2" stroke-width="2"/>
+  <rect x="16" y="22" width="96" height="84" rx="12" fill="#F2F3F6"/>
+  <rect x="16" y="22" width="96" height="18" rx="9" fill="#E2E5EA"/>
+  <circle cx="28" cy="31" r="4" fill="#FF7A59"/>
+  <circle cx="40" cy="31" r="4" fill="#FFD84D"/>
+  <circle cx="52" cy="31" r="4" fill="#9BDB8A"/>
+  <rect x="26" y="50" width="44" height="26" rx="6" fill="#DDE1E7"/>
+  <g stroke="#DDE1E7" stroke-width="5" stroke-linecap="round">
+    <path d="M78 56H102M78 66H102M26 88H102M26 96H102"/>
+  </g>
+  <g transform="translate(46 52) scale(.42)"><path d="M0 50 C-12 36 -26 24 -26 4 a26 26 0 0 1 52 0 c0 20 -14 32 -26 46z" fill="#FF7A59"/><circle cx="0" cy="4" r="10" fill="#fff"/></g>
+  <g transform="translate(92 60) scale(.36)"><path d="M0 50 C-12 36 -26 24 -26 4 a26 26 0 0 1 52 0 c0 20 -14 32 -26 46z" fill="#4FC3A1"/><circle cx="0" cy="4" r="10" fill="#fff"/></g>
+  <g transform="translate(74 84) scale(.32)"><path d="M0 50 C-12 36 -26 24 -26 4 a26 26 0 0 1 52 0 c0 20 -14 32 -26 46z" fill="#A99BF0"/><circle cx="0" cy="4" r="10" fill="#fff"/></g>
+</svg>
