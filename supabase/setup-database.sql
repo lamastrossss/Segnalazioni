@@ -1,5 +1,5 @@
 -- Stage Review — creazione del database (da incollare UNA volta nel SQL Editor di Supabase).
--- Contiene le migrazioni 001-003, senza comandi di transazione: tutto viene salvato.
+-- Contiene le migrazioni 001-004, senza comandi di transazione: tutto viene salvato.
 -- Esito atteso: "Success. No rows returned".
 -- Il controllo di sicurezza (supabase/tests/rls-check.sql) va eseguito DOPO, in una query separata.
 
@@ -309,3 +309,9 @@ create policy media_insert on storage.objects for insert to authenticated
   with check (bucket_id = 'media' and (select public.is_studio()));
 
 alter publication supabase_realtime add table public.issues;
+
+-- ===== supabase/migrations/004_utenti_eliminabili.sql =====
+-- Stage Review — 004: utenti eliminabili senza perdere lo storico.
+-- Il profilo (nome e colore) non viene più cancellato insieme all'account: siti, segnalazioni e
+-- risposte restano con il nome di chi le ha scritte. L'utente eliminato non può più accedere.
+alter table public.profiles drop constraint if exists profiles_id_fkey;
