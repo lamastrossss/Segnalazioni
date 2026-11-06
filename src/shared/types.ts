@@ -23,7 +23,7 @@ export interface Issue {
   viewport_class: ViewportClass; viewport_width: number; browser: string; anchor: Anchor; body: string;
   status: IssueStatus; author_id: string; screenshot_path: string | null; screenshot_bytes: number;
   created_at: string; updated_at: string; deleted_at: string | null; deleted_by: string | null;
-  replies_count: number;
+  edited_at?: string | null; replies_count: number;
 }
 export interface IssueDetail extends Issue { replies: Reply[]; attachments: Attachment[] }
 export interface ArchiveStatus { last_run_at: string | null; last_ok_at: string | null; last_error: string | null }

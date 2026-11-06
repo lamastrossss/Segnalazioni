@@ -5,7 +5,7 @@ import type { Result } from '../shared/errors';
 import type { DuplicateMatch } from './pin-logic';
 import { el } from '../shared/dom';
 import { VIEWPORT_LABEL } from '../shared/viewport';
-import { formatDate, STATUS_LABEL } from '../shared/format';
+import { formatDate, formatEdited, STATUS_LABEL } from '../shared/format';
 import { createAttachmentPicker } from '../shared/attachments-ui';
 
 export interface NewIssueContext {
@@ -166,6 +166,7 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
     const mine = !!me && me.id === issue.author_id;
     const actions: Node[] = [];
     if (mine && !issue.deleted_at) {
+      actions.push(el('button', { class: 'sr-btn sr-ghost', text: 'Modifica', attrs: { type: 'button' }, on: { click: () => editText() } }));
       actions.push(el('button', { class: 'sr-btn sr-danger', text: 'Elimina', attrs: { type: 'button' }, on: { click: async () => {
         if (!confirm('Eliminare la segnalazione? Verrà tolta anche dall’archivio su Fogli Google.')) return;
         const r = await withReauth(() => api.softDeleteIssue(issue.id), m => { err.textContent = m; });
@@ -173,10 +174,34 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
       } } }));
     }
 
+    const bodyText = el('p', { class: 'sr-body', text: issue.body });
     const body = el('div', {}, [
       el('p', { class: 'sr-muted', text: `${author(issue.author_id)} · ${formatDate(issue.created_at)} · ${VIEWPORT_LABEL[issue.viewport_class]} ${issue.viewport_width}` }),
-      el('p', { class: 'sr-body', text: issue.body }),
+      issue.edited_at
+        ? el('p', { class: 'sr-edited', text: formatEdited(issue.edited_at), attrs: { title: `Testo modificato il ${formatDate(issue.edited_at)}` } })
+        : '',
+      bodyText,
     ]);
+
+    function editText() {
+      if (body.querySelector('.sr-edit')) return;
+      const ta = el('textarea', { attrs: { 'aria-label': 'Testo della segnalazione' } });
+      ta.value = issue.body;
+      const editErr = el('p', { class: 'sr-error-text', attrs: { role: 'alert' } });
+      const save = el('button', { class: 'sr-btn', text: 'Salva', attrs: { type: 'button' } });
+      const box = el('div', { class: 'sr-edit' }, [ta, editErr, el('div', { class: 'sr-row' }, [save,
+        el('button', { class: 'sr-btn sr-ghost', text: 'Annulla', attrs: { type: 'button' }, on: { click: () => { box.replaceWith(bodyText); } } })])]);
+      save.addEventListener('click', async () => {
+        save.disabled = true;
+        const r = await withReauth(() => api.editIssue(issue.id, ta.value), m => { editErr.textContent = m; });
+        save.disabled = false;
+        if (!r.ok) return;
+        deps.onChanged(issue.id);
+        void openThread(issue.id);
+      });
+      bodyText.replaceWith(box);
+      ta.focus();
+    }
     if (issue.screenshot_path) {
       const shot = el('img', { class: 'sr-shot', attrs: { alt: 'Screenshot della segnalazione' } });
       body.append(shot);

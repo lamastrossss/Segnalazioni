@@ -89,6 +89,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .sr-drop.sr-over { border-color: #2E86AB; background: #EEF6FA; }
 .sr-shot { width: 100%; border-radius: 8px; cursor: zoom-in; display: block; margin: 8px 0; }
 .sr-body { white-space: pre-wrap; word-break: break-word; }
+.sr-edited { display: flex; align-items: center; gap: 6px; margin: -4px 0 6px; font-size: 12px; color: #666; }
+.sr-edited::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #2E86AB; flex: none; }
+.sr-edit { display: grid; gap: 8px; margin: 8px 0; }
 .sr-reply { border-top: 1px solid #EEE; padding: 8px 0; }
 .sr-lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: grid; place-items: center; cursor: zoom-out; }
 .sr-lightbox img { max-width: 95vw; max-height: 95vh; }

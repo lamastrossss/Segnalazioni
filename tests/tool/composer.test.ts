@@ -180,3 +180,56 @@ describe('senza +1', () => {
     expect(shadow.textContent).toContain('Rispondi');
   });
 });
+
+describe('modifica della segnalazione', () => {
+  const detail = (over: any = {}) => ({ ok: true as const, value: { ...makeIssue({ id: 'i1', author_id: 'u1', body: 'Testo iniziale', ...over }), replies: [], attachments: [] } });
+  const button = (t: string) => [...shadow.querySelectorAll('button')].find(b => b.textContent === t);
+
+  it('l\'autore modifica il testo; il dettaglio si ricarica', async () => {
+    const { api, composer } = setup();
+    api.getIssue.mockResolvedValueOnce(detail()).mockResolvedValueOnce(detail({ body: 'Testo corretto', edited_at: new Date().toISOString() }));
+    await composer.openThread('i1');
+    button('Modifica')!.click();
+    const ta = shadow.querySelector<HTMLTextAreaElement>('.sr-edit textarea')!;
+    expect(ta.value).toBe('Testo iniziale');
+    ta.value = 'Testo corretto';
+    shadow.querySelector<HTMLButtonElement>('.sr-edit .sr-btn:not(.sr-ghost)')!.click();
+    await flush(); await flush();
+    expect(api.editIssue).toHaveBeenCalledWith('i1', 'Testo corretto');
+    expect(shadow.querySelector('.sr-body')!.textContent).toBe('Testo corretto');
+    expect(shadow.querySelector('.sr-edited')!.textContent).toMatch(/^Modificata alle \d\d:\d\d$/);
+  });
+
+  it('Annulla torna al testo senza salvare; errore mostrato restando in modifica', async () => {
+    const { api, composer } = setup();
+    api.getIssue.mockResolvedValue(detail());
+    await composer.openThread('i1');
+    button('Modifica')!.click();
+    button('Annulla')!.click();
+    expect(shadow.querySelector('.sr-edit')).toBeNull();
+    expect(api.editIssue).not.toHaveBeenCalled();
+    (api.editIssue as any).mockResolvedValueOnce({ ok: false, error: { kind: 'forbidden', message: "solo l'autore può modificare il testo" } });
+    button('Modifica')!.click();
+    shadow.querySelector<HTMLButtonElement>('.sr-edit .sr-btn:not(.sr-ghost)')!.click();
+    await flush();
+    expect(shadow.querySelector('.sr-edit')).not.toBeNull();
+    expect(shadow.textContent).toContain("solo l'autore può modificare il testo");
+  });
+
+  it('un collega non vede Modifica; vede però che è stata modificata', async () => {
+    const other = { id: 'u2', name: 'Marco', color: '#2E86AB' };
+    const { api, composer } = setup(other);
+    api.getIssue.mockResolvedValueOnce(detail({ edited_at: '2026-11-05T09:05:00Z' }));
+    await composer.openThread('i1');
+    expect(button('Modifica')).toBeUndefined();
+    expect(shadow.querySelector('.sr-edited')!.textContent).toMatch(/^Modificata (il|alle)/);
+  });
+
+  it('senza modifiche non c\'è la dicitura', async () => {
+    const { api, composer } = setup();
+    api.getIssue.mockResolvedValueOnce(detail());
+    await composer.openThread('i1');
+    expect(shadow.querySelector('.sr-edited')).toBeNull();
+  });
+});
+

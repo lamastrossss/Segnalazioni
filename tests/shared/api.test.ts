@@ -115,4 +115,12 @@ describe('altre operazioni', () => {
     expect(dup.ok === false && dup.error.message).toBe('Uno di questi stage è già collegato a un altro sito.');
     expect(fake.calls.some(c => c.table === 'project_domains' && c.op === 'delete')).toBe(false); // niente rimosso se l'aggiunta fallisce
   });
+  it('editIssue salva il testo ripulito e rifiuta quello vuoto', async () => {
+    const { fake, api } = setup();
+    fake.on('issues:update', () => ({ data: [{ id: 'i1' }], error: null }));
+    expect(await api.editIssue('i1', '  Titolo troppo vicino  ')).toEqual({ ok: true, value: undefined });
+    expect(fake.calls.at(-1)!.payload).toEqual({ body: 'Titolo troppo vicino' });
+    const r = await api.editIssue('i1', '   ');
+    expect(r.ok === false && r.error.message).toBe('Scrivi cosa non va.');
+  });
 });

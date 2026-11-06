@@ -23,6 +23,7 @@ export function fakeApi(issues: Issue[] = []) {
     addReply: vi.fn(),
     uploadAttachment: vi.fn(),
     setStatus: vi.fn(() => okv(undefined)),
+    editIssue: vi.fn(() => okv(undefined)),
     softDeleteIssue: vi.fn(() => okv(undefined)),
     softDeleteReply: vi.fn(() => okv(undefined)),
     signedUrl: vi.fn((p: string) => okv(`https://signed/${p}`)),

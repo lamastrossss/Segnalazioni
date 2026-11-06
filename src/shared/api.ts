@@ -197,6 +197,12 @@ export function createApi(client: SupabaseClient) {
     uploadAttachment,
 
     setStatus(issueId: string, status: IssueStatus) { return updateOne('issues', issueId, { status }); },
+    /** Modifica il testo (solo l'autore: lo controlla il database, che segna anche la data di modifica). */
+    async editIssue(issueId: string, body: string): Promise<Result<void>> {
+      const clean = body.trim();
+      if (!clean) return fail('unknown', 'Scrivi cosa non va.');
+      return updateOne('issues', issueId, { body: clean });
+    },
     softDeleteIssue(issueId: string) { return updateOne('issues', issueId, { deleted_at: new Date().toISOString() }); },
     softDeleteReply(replyId: string) { return updateOne('replies', replyId, { deleted_at: new Date().toISOString() }); },
 
