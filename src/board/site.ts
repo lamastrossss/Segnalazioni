@@ -2,9 +2,9 @@ import { initBoard } from './common';
 import { filterIssues, STATUS_LABEL, type IssueFilters } from './logic';
 import { renderDetail } from './detail';
 import { renderSiteHeader } from './site-header';
+import { renderIssueRow } from './issue-row';
 import { el } from '../shared/dom';
 import { VIEWPORT_LABEL } from '../shared/viewport';
-import { formatDate, formatEdited } from '../shared/format';
 import type { Issue, IssueStatus, Profile, ViewportClass } from '../shared/types';
 
 const params = new URLSearchParams(location.search);
@@ -68,27 +68,19 @@ function renderFilters() {
 }
 
 function row(i: Issue) {
-  const img = el('img', { class: 'thumb', attrs: { alt: '' } });
-  if (i.screenshot_path) {
-    const cached = thumbs.get(i.screenshot_path);
-    if (cached) img.src = cached;
-    else void api.signedUrl(i.screenshot_path).then(u => { if (u.ok) { thumbs.set(i.screenshot_path!, u.value); img.src = u.value; } });
-  }
-  return el('li', {}, [el('button', { class: 'issue', attrs: { type: 'button' }, on: { click: () => void detail.open(i.id) } }, [
-    img,
-    el('div', {}, [
-      el('p', { class: 'title' }, [el('span', { class: 'num', text: `#${i.number}` }), i.body.slice(0, 120)]),
-      el('div', { class: 'chips' }, [
-        el('span', { class: `chip ${i.status}`, text: STATUS_LABEL[i.status] }),
-        el('span', { class: 'chip', text: `${VIEWPORT_LABEL[i.viewport_class]} ${i.viewport_width}` }),
-        el('span', { class: 'chip', text: i.page_path }),
-      ]),
-      el('p', { class: 'muted' }, [
-        `${profilesById.get(i.author_id)?.name ?? 'Utente'} · risposte: ${i.replies_count}`,
-        i.edited_at ? el('span', { class: 'edited', text: formatEdited(i.edited_at), attrs: { title: `Testo modificato il ${formatDate(i.edited_at)}` } }) : '',
-      ]),
-    ]),
-  ])]);
+  return renderIssueRow(i, {
+    api, me: board.me, profilesById,
+    onOpen: id => void detail.open(id),
+    onSaved: id => void refresh(id),
+    thumb: async path => {
+      const cached = thumbs.get(path);
+      if (cached) return cached;
+      const u = await api.signedUrl(path);
+      if (!u.ok) return null;
+      thumbs.set(path, u.value);
+      return u.value;
+    },
+  });
 }
 
 function renderList() {

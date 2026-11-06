@@ -4,6 +4,8 @@ import icon from '../board/public/icon.png';
 import { el } from '../src/shared/dom';
 import { renderSiteHeader } from '../src/board/site-header';
 import { stageLinks } from '../src/board/stage-links';
+import { renderIssueRow } from '../src/board/issue-row';
+import type { Issue } from '../src/shared/types';
 import { renderAuthForm, renderChangePassword } from '../src/shared/auth-ui';
 import { TOOL_CSS } from '../src/tool/styles';
 import type { Auth } from '../src/shared/auth';
@@ -41,3 +43,17 @@ app.append(el('div', { class: 'grid', attrs: { style: 'margin-top:24px' } }, [el
   el('p', { class: 'muted', text: 'Nessuna attività' }),
   el('div', { class: 'chips' }, [el('a', { class: 'btn', text: 'Apri', attrs: { href: '#' } })]),
 ])]));
+
+const me = { id: 'u1', name: 'Alessandra Mastroeni', color: '#E4572E' };
+const people = new Map([[me.id, me], ['u2', { id: 'u2', name: 'Simona Brancato', color: '#A23B72' }]]);
+const base = { project_id: 'p1', page_url: 'https://x/', browser: '', anchor: {} as any, status: 'open' as const, screenshot_path: null, screenshot_bytes: 0,
+  created_at: '', updated_at: '', deleted_at: null, deleted_by: null, replies_count: 0 };
+const rows: Issue[] = [
+  { ...base, id: 'r1', number: 54, page_path: '/pages/loyalty-program', viewport_class: 'mobile', viewport_width: 375, body: 'Aumentare padding superiore della sezione FAQ', author_id: 'u1' },
+  { ...base, id: 'r2', number: 55, page_path: '/collections/chromoplus', viewport_class: 'desktop', viewport_width: 1484, body: "Possiamo diminuire l'altezza di questa immagine?", author_id: 'u2' },
+];
+const ul = el('ul', { class: 'issues', attrs: { style: 'margin-top:24px' } });
+const editApi = { editIssue: async (id: string, body: string) => { const r = rows.find(x => x.id === id)!; r.body = body.trim(); r.edited_at = new Date().toISOString(); return { ok: true as const, value: undefined }; } } as unknown as Api;
+const draw = () => ul.replaceChildren(...rows.map(r => renderIssueRow(r, { api: editApi, me: () => me, profilesById: people, onOpen: () => {}, onSaved: () => draw(), thumb: async () => null })));
+draw();
+app.append(ul);
