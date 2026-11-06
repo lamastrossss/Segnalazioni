@@ -9,7 +9,7 @@ const read = (p: string) => readFileSync(join(root, p), 'utf8');
 async function freshDb() {
   const db = new PGlite();
   await db.exec(read('tests/db/supabase-shim.sql'));
-  for (const m of ['001_schema.sql', '002_rls.sql', '003_storage_realtime.sql', '004_utenti_eliminabili.sql', '005_gestione_siti.sql']) {
+  for (const m of ['001_schema.sql', '002_rls.sql', '003_storage_realtime.sql', '004_utenti_eliminabili.sql', '005_gestione_siti.sql', '006_modifica_segnalazioni.sql']) {
     await db.exec(read(`supabase/migrations/${m}`));
   }
   return db;
