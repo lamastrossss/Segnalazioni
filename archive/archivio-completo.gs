@@ -86,7 +86,7 @@ function buildRow(issue, profilesById, tz, urls) {
     SR_VIEWPORT[issue.viewport_class] + ' ' + issue.viewport_width,
     srSafeText(issue.body),
     srSafeText(srName(profilesById, issue.author_id)),
-    srFormatDate(issue.created_at, tz),
+    srFormatDate(issue.created_at, tz) + (issue.edited_at ? ' · modificata ' + srFormatDate(issue.edited_at, tz) : ''),
     srSafeText(srRepliesText(issue, profilesById, tz)),
     shot ? 'Apri' : '',
     shot ? '=IMAGE(' + srQuote(shot) + ')' : '',

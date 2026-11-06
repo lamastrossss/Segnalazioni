@@ -80,4 +80,10 @@ describe('riga del foglio', () => {
     const { values } = buildRow(iss, profiles, 'Europe/Rome', { 'p/i1/screenshot.jpg': 'https://sb/s?q="a"' });
     expect(values[9]).toBe('=IMAGE("https://sb/s?q=""a""")');
   });
+
+  it('se il testo è stato modificato, la data lo riporta', () => {
+    const { values } = buildRow({ ...iss, edited_at: '2026-11-06T08:30:00Z' }, profiles, 'Europe/Rome', urls);
+    expect(values[6]).toBe('04/11/2026 10:12 · modificata 06/11/2026 09:30');
+  });
 });
+

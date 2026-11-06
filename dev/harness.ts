@@ -41,6 +41,7 @@ const api = {
     return { ok: true as const, value: { reply: r, failed: [] } };
   },
   uploadAttachment: () => ok({} as never),
+  editIssue: async (id: string, body: string) => { const d = issues.get(id)!; d.body = body.trim(); d.edited_at = now(); return { ok: true as const, value: undefined }; },
   setStatus: async (id: string, s: Issue['status']) => { issues.get(id)!.status = s; return { ok: true as const, value: undefined }; },
   softDeleteIssue: async (id: string) => { issues.get(id)!.deleted_at = now(); return { ok: true as const, value: undefined }; },
   softDeleteReply: () => ok(undefined),

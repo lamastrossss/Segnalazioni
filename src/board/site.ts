@@ -4,6 +4,7 @@ import { renderDetail } from './detail';
 import { renderSiteHeader } from './site-header';
 import { el } from '../shared/dom';
 import { VIEWPORT_LABEL } from '../shared/viewport';
+import { formatDate, formatEdited } from '../shared/format';
 import type { Issue, IssueStatus, Profile, ViewportClass } from '../shared/types';
 
 const params = new URLSearchParams(location.search);
@@ -82,7 +83,10 @@ function row(i: Issue) {
         el('span', { class: 'chip', text: `${VIEWPORT_LABEL[i.viewport_class]} ${i.viewport_width}` }),
         el('span', { class: 'chip', text: i.page_path }),
       ]),
-      el('p', { class: 'muted', text: `${profilesById.get(i.author_id)?.name ?? 'Utente'} · risposte: ${i.replies_count}` }),
+      el('p', { class: 'muted' }, [
+        `${profilesById.get(i.author_id)?.name ?? 'Utente'} · risposte: ${i.replies_count}`,
+        i.edited_at ? el('span', { class: 'edited', text: formatEdited(i.edited_at), attrs: { title: `Testo modificato il ${formatDate(i.edited_at)}` } }) : '',
+      ]),
     ]),
   ])]);
 }
