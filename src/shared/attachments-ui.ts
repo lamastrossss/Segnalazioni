@@ -21,17 +21,22 @@ export function openFilePicker(input: HTMLInputElement) {
  * Zona allegati: trascina, incolla (Cmd+V) o scegli file. Max 5 immagini.
  * `pasteTarget` riceve l'evento paste (di solito il pannello o la textarea).
  */
-export function createAttachmentPicker(pasteTarget: HTMLElement, opts: { prepare?: (f: File) => Promise<PreparedImage>; lightbox?: (src: string) => void } = {}) {
+export function createAttachmentPicker(pasteTarget: HTMLElement, opts: {
+  prepare?: (f: File) => Promise<PreparedImage>; lightbox?: (src: string) => void;
+  /** Versione compatta: niente riquadro, solo un pulsante (`button`) da mettere dove serve; si trascina e incolla su `pasteTarget`. */
+  compact?: string;
+} = {}) {
   const prepare = opts.prepare ?? prepareAttachment;
   const images: PreparedImage[] = [];
   let pending = 0;
   const thumbs = el('div', { class: 'sr-thumbs' });
   const notes = el('p', { class: 'sr-muted', attrs: { role: 'status' } });
   const input = el('input', { class: 'sr-file', attrs: { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', multiple: '', tabindex: '-1', 'aria-hidden': 'true' } });
-  const pick = el('button', { class: 'sr-btn sr-ghost', text: 'Aggiungi immagini', attrs: { type: 'button' }, on: { click: () => openFilePicker(input) } });
-  const drop = el('div', { class: 'sr-drop' }, [
-    'Trascina qui le immagini, incollale con Cmd+V oppure ', pick, input,
-  ]);
+  const pick = el('button', { class: 'sr-btn sr-ghost', text: opts.compact ?? 'Aggiungi immagini', attrs: { type: 'button' }, on: { click: () => openFilePicker(input) } });
+  const drop = opts.compact
+    ? pasteTarget
+    : el('div', { class: 'sr-drop' }, ['Trascina qui le immagini, incollale con Cmd+V oppure ', pick, input]);
+  const hideAdding = () => { if (opts.compact) pick.hidden = true; else drop.hidden = true; };
 
   function thumb(img: PreparedImage, onRemove?: () => void) {
     const src = objectUrl(img.blob);
@@ -72,15 +77,17 @@ export function createAttachmentPicker(pasteTarget: HTMLElement, opts: { prepare
   });
 
   return {
-    element: el('div', {}, [thumbs, drop, notes]),
+    element: el('div', {}, opts.compact ? [thumbs, notes, input] : [thumbs, drop, notes]),
+    /** Il pulsante per scegliere i file (nella versione compatta va messo a mano). */
+    button: pick,
     images: () => [...images],
     busy: () => pending > 0,
     clear() { images.splice(0); thumbs.replaceChildren(); notes.textContent = ''; },
-    lock() { drop.hidden = true; for (const b of thumbs.querySelectorAll('.sr-thumb-x')) b.remove(); },
+    lock() { hideAdding(); for (const b of thumbs.querySelectorAll('.sr-thumb-x')) b.remove(); },
     /** Mostra gli allegati non caricati, ognuno con il suo "Riprova". */
     markFailed(failed: PreparedImage[], retry: (img: PreparedImage) => Promise<Result<unknown>>, onAllDone: () => void) {
       thumbs.replaceChildren();
-      drop.hidden = true;
+      hideAdding();
       let left = failed.length;
       notes.textContent = `${left} ${left === 1 ? 'immagine non caricata' : 'immagini non caricate'}.`;
       for (const img of failed) {

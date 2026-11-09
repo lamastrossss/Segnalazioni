@@ -235,6 +235,7 @@ describe('modifica della segnalazione', () => {
     const edit = shadow.querySelector('.sr-edit')!;
     expect([...edit.querySelectorAll('button')].map(b => b.textContent)).toEqual(['Aggiungi immagini', 'Salva modifiche', 'Annulla']);
     expect(button('Elimina')!.closest<HTMLElement>('.sr-row')!.hidden).toBe(true);
+    expect(shadow.querySelector<HTMLElement>('.sr-reply-box')!.hidden).toBe(true);
     const ta = edit.querySelector('textarea')!;
     const ev = new Event('paste') as any;
     ev.clipboardData = { files: [new File(['x'], 'shot.png', { type: 'image/png' })] };
@@ -263,6 +264,25 @@ describe('modifica della segnalazione', () => {
     expect(api.editIssue).toHaveBeenCalledWith('i1', 'Testo nuovo');
     expect(shadow.querySelector('.sr-retry-att')).not.toBeNull();
     expect(button('Chiudi')).toBeDefined();
+  });
+
+  it('risposte: niente riquadro, solo "+ Immagine alla risposta" accanto a Rispondi; Annulla della modifica le rimostra', async () => {
+    const { api, composer } = setup();
+    api.getIssue.mockResolvedValue(detail());
+    await composer.openThread('i1');
+    const box = shadow.querySelector<HTMLElement>('.sr-reply-box')!;
+    expect(box.querySelector('.sr-drop')).toBeNull();
+    expect(shadow.querySelectorAll('.sr-drop').length).toBe(0);
+    const row = button('+ Immagine alla risposta')!.closest('.sr-row')!;
+    expect([...row.querySelectorAll('button')].map(b => b.textContent)).toEqual(['Rispondi', '+ Immagine alla risposta']);
+    const ev = new Event('paste') as any;
+    ev.clipboardData = { files: [new File(['x'], 'r.png', { type: 'image/png' })] };
+    box.querySelector('textarea')!.dispatchEvent(ev); await flush();
+    expect(box.querySelectorAll('.sr-thumb').length).toBe(1);
+    button('Modifica')!.click();
+    expect(box.hidden).toBe(true);
+    button('Annulla')!.click();
+    expect(box.hidden).toBe(false);
   });
 
   it('senza modifiche non c\'è la dicitura', async () => {

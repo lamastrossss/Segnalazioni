@@ -220,9 +220,10 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
         cancel.onclick = reload;
         editPicker.markFailed(failed, img => api.uploadAttachment(issue, img, null), reload);
       });
-      function stopEditing() { box.replaceWith(bodyText); if (actionsRow) actionsRow.hidden = false; }
+      function stopEditing() { box.replaceWith(bodyText); if (actionsRow) actionsRow.hidden = false; replySection.hidden = false; }
       bodyText.replaceWith(box);
       if (actionsRow) actionsRow.hidden = true; // in modifica restano solo Salva modifiche e Annulla
+      replySection.hidden = true;
       ta.focus();
     }
     if (issue.screenshot_path) {
@@ -250,8 +251,8 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
       replies.append(row);
     }
 
-    const replyText = el('textarea', { attrs: { placeholder: 'Rispondi…', 'aria-label': 'Risposta' } });
-    const picker = createAttachmentPicker(replyText, { prepare: deps.prepare, lightbox });
+    const replyText = el('textarea', { attrs: { placeholder: 'Rispondi… (puoi incollare immagini con Cmd+V)', 'aria-label': 'Risposta' } });
+    const picker = createAttachmentPicker(replyText, { prepare: deps.prepare, lightbox, compact: '+ Immagine alla risposta' });
     const send = el('button', { class: 'sr-btn sr-send', text: 'Rispondi', attrs: { type: 'button' } });
     send.addEventListener('click', async () => {
       const text = replyText.value.trim();
@@ -269,11 +270,12 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
       } else void openThread(issue.id);
     });
 
+    // In modifica si nasconde: le immagini si aggiungono solo nel riquadro della modifica
+    const replySection = el('div', { class: 'sr-reply-box' }, [replies, replyText, picker.element, el('div', { class: 'sr-row' }, [send, picker.button])]);
     const p = el('div', { class: 'sr sr-panel sr-thread', attrs: { 'data-issue': issue.id } }, [
       header(`#${issue.number}`, [status]),
       issue.deleted_at ? el('p', { class: 'sr-error-text', text: 'Segnalazione eliminata.' }) : '',
-      body, actionsRow ?? '', ...(deps.threadExtras?.(issue) ?? []), replies,
-      replyText, picker.element, err, send,
+      body, actionsRow ?? '', ...(deps.threadExtras?.(issue) ?? []), replySection, err,
     ]);
     mount(p);
     threadId = issue.id;

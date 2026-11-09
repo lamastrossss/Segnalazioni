@@ -88,6 +88,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .sr-thumb.sr-failed { outline: 2px solid #C73E1D; }
 .sr-drop { border: 1px dashed #BDBDBD; border-radius: 8px; padding: 10px; text-align: center; color: #666; font-size: 12px; }
 .sr-drop.sr-over { border-color: #2E86AB; background: #EEF6FA; }
+textarea.sr-over { border-color: #2E86AB; background: #EEF6FA; }
+.sr-thumbs:empty, .sr-reply-box p:empty { display: none; }
 .sr-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; }
 .sr-shot { width: 100%; border-radius: 8px; cursor: zoom-in; display: block; margin: 8px 0; }
 .sr-body { white-space: pre-wrap; word-break: break-word; }
