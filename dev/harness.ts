@@ -40,7 +40,11 @@ const api = {
     const d = issues.get(issue.id)!; d.replies.push(r); d.replies_count++;
     return { ok: true as const, value: { reply: r, failed: [] } };
   },
-  uploadAttachment: () => ok({} as never),
+  uploadAttachment: (issue: { id: string }, img: { blob: Blob; width: number; height: number; bytes: number }, replyId: string | null) => {
+    const a = { id: `a${++n}`, issue_id: issue.id, reply_id: replyId, path: URL.createObjectURL(img.blob), width: img.width, height: img.height, bytes: img.bytes, created_at: now(), deleted_at: null };
+    if (!replyId) issues.get(issue.id)?.attachments.push(a as never);
+    return ok(a as never);
+  },
   editIssue: async (id: string, body: string) => { const d = issues.get(id)!; d.body = body.trim(); d.edited_at = now(); return { ok: true as const, value: undefined }; },
   setStatus: async (id: string, s: Issue['status']) => { issues.get(id)!.status = s; return { ok: true as const, value: undefined }; },
   softDeleteIssue: async (id: string) => { issues.get(id)!.deleted_at = now(); return { ok: true as const, value: undefined }; },

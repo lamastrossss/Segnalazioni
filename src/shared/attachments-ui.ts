@@ -5,6 +5,19 @@ import type { Result } from './errors';
 const objectUrl = (b: Blob) => (typeof URL.createObjectURL === 'function' ? URL.createObjectURL(b) : '');
 
 /**
+ * Apre la finestra di scelta file. Con showPicker() non passa da un clic simulato:
+ * alcuni siti (spesso solo nel layout mobile) annullano i clic a livello di pagina
+ * e così il clic simulato su <input type=file> non apriva nulla.
+ */
+export function openFilePicker(input: HTMLInputElement) {
+  const withPicker = input as HTMLInputElement & { showPicker?: () => void };
+  if (typeof withPicker.showPicker === 'function') {
+    try { withPicker.showPicker(); return; } catch { /* browser vecchio o contesto non ammesso: si ripiega sul clic */ }
+  }
+  input.click();
+}
+
+/**
  * Zona allegati: trascina, incolla (Cmd+V) o scegli file. Max 5 immagini.
  * `pasteTarget` riceve l'evento paste (di solito il pannello o la textarea).
  */
@@ -14,8 +27,8 @@ export function createAttachmentPicker(pasteTarget: HTMLElement, opts: { prepare
   let pending = 0;
   const thumbs = el('div', { class: 'sr-thumbs' });
   const notes = el('p', { class: 'sr-muted', attrs: { role: 'status' } });
-  const input = el('input', { attrs: { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', multiple: '', hidden: '' } });
-  const pick = el('button', { class: 'sr-btn sr-ghost', text: 'Aggiungi immagini', attrs: { type: 'button' }, on: { click: () => input.click() } });
+  const input = el('input', { class: 'sr-file', attrs: { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', multiple: '', tabindex: '-1', 'aria-hidden': 'true' } });
+  const pick = el('button', { class: 'sr-btn sr-ghost', text: 'Aggiungi immagini', attrs: { type: 'button' }, on: { click: () => openFilePicker(input) } });
   const drop = el('div', { class: 'sr-drop' }, [
     'Trascina qui le immagini, incollale con Cmd+V oppure ', pick, input,
   ]);

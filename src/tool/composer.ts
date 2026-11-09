@@ -174,6 +174,7 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
       } } }));
     }
 
+    const actionsRow = actions.length ? el('div', { class: 'sr-row' }, actions) : null;
     const bodyText = el('p', { class: 'sr-body', text: issue.body });
     const body = el('div', {}, [
       el('p', { class: 'sr-muted', text: `${author(issue.author_id)} · ${formatDate(issue.created_at)} · ${VIEWPORT_LABEL[issue.viewport_class]} ${issue.viewport_width}` }),
@@ -188,18 +189,40 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
       const ta = el('textarea', { attrs: { 'aria-label': 'Testo della segnalazione' } });
       ta.value = issue.body;
       const editErr = el('p', { class: 'sr-error-text', attrs: { role: 'alert' } });
-      const save = el('button', { class: 'sr-btn', text: 'Salva', attrs: { type: 'button' } });
-      const box = el('div', { class: 'sr-edit' }, [ta, editErr, el('div', { class: 'sr-row' }, [save,
-        el('button', { class: 'sr-btn sr-ghost', text: 'Annulla', attrs: { type: 'button' }, on: { click: () => { box.replaceWith(bodyText); } } })])]);
+      const editPicker = createAttachmentPicker(ta, { prepare: deps.prepare, lightbox });
+      const save = el('button', { class: 'sr-btn', text: 'Salva modifiche', attrs: { type: 'button' } });
+      const cancel = el('button', { class: 'sr-btn sr-ghost', text: 'Annulla', attrs: { type: 'button' }, on: { click: () => stopEditing() } });
+      const box = el('div', { class: 'sr-edit' }, [ta, editPicker.element, editErr, el('div', { class: 'sr-row' }, [save, cancel])]);
+      const reload = () => { deps.onChanged(issue.id); void openThread(issue.id); };
       save.addEventListener('click', async () => {
+        if (editPicker.busy()) { editErr.textContent = 'Attendi: sto preparando le immagini.'; return; }
+        const textChanged = ta.value.trim() !== issue.body;
+        const imgs = editPicker.images();
+        if (!textChanged && !imgs.length) { stopEditing(); return; }
         save.disabled = true;
-        const r = await withReauth(() => api.editIssue(issue.id, ta.value), m => { editErr.textContent = m; });
+        editErr.textContent = '';
+        if (textChanged) {
+          const r = await withReauth(() => api.editIssue(issue.id, ta.value), m => { editErr.textContent = m; });
+          if (!r.ok) { save.disabled = false; return; }
+        }
+        const failed: PreparedImage[] = [];
+        for (const img of imgs) {
+          const r = await withReauth(() => api.uploadAttachment(issue, img, null), () => {});
+          if (!r.ok) failed.push(img);
+        }
         save.disabled = false;
-        if (!r.ok) return;
+        if (!failed.length) { reload(); return; }
+        // Il testo è salvato: restano da ricaricare solo le immagini non andate a buon fine
         deps.onChanged(issue.id);
-        void openThread(issue.id);
+        ta.disabled = true;
+        save.hidden = true;
+        cancel.textContent = 'Chiudi';
+        cancel.onclick = reload;
+        editPicker.markFailed(failed, img => api.uploadAttachment(issue, img, null), reload);
       });
+      function stopEditing() { box.replaceWith(bodyText); if (actionsRow) actionsRow.hidden = false; }
       bodyText.replaceWith(box);
+      if (actionsRow) actionsRow.hidden = true; // in modifica restano solo Salva modifiche e Annulla
       ta.focus();
     }
     if (issue.screenshot_path) {
@@ -249,7 +272,7 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
     const p = el('div', { class: 'sr sr-panel sr-thread', attrs: { 'data-issue': issue.id } }, [
       header(`#${issue.number}`, [status]),
       issue.deleted_at ? el('p', { class: 'sr-error-text', text: 'Segnalazione eliminata.' }) : '',
-      body, actions.length ? el('div', { class: 'sr-row' }, actions) : '', ...(deps.threadExtras?.(issue) ?? []), replies,
+      body, actionsRow ?? '', ...(deps.threadExtras?.(issue) ?? []), replies,
       replyText, picker.element, err, send,
     ]);
     mount(p);

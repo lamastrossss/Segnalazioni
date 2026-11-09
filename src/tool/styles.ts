@@ -39,6 +39,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .sr-panel h2 { font-size: 15px; margin: 0 0 12px; }
 .sr-panel h3 { font-size: 13px; margin: 12px 0 6px; color: #555; }
 .sr-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sr-row[hidden] { display: none; }
 .sr-muted { color: #666; font-size: 12px; }
 .sr-btn { padding: 8px 12px; border-radius: 8px; background: #111; color: #fff; font-weight: 600; }
 .sr-btn:disabled { opacity: .5; cursor: default; }
@@ -87,11 +88,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .sr-thumb.sr-failed { outline: 2px solid #C73E1D; }
 .sr-drop { border: 1px dashed #BDBDBD; border-radius: 8px; padding: 10px; text-align: center; color: #666; font-size: 12px; }
 .sr-drop.sr-over { border-color: #2E86AB; background: #EEF6FA; }
+.sr-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; }
 .sr-shot { width: 100%; border-radius: 8px; cursor: zoom-in; display: block; margin: 8px 0; }
 .sr-body { white-space: pre-wrap; word-break: break-word; }
 .sr-edited { display: flex; align-items: center; gap: 6px; margin: -4px 0 6px; font-size: 12px; color: #666; }
 .sr-edited::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #2E86AB; flex: none; }
 .sr-edit { display: grid; gap: 8px; margin: 8px 0; }
+.sr-edit p:empty { display: none; }
 .sr-reply { border-top: 1px solid #EEE; padding: 8px 0; }
 .sr-lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: grid; place-items: center; cursor: zoom-out; }
 .sr-lightbox img { max-width: 95vw; max-height: 95vh; }

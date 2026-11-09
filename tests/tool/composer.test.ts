@@ -210,6 +210,7 @@ describe('modifica della segnalazione', () => {
     expect(api.editIssue).not.toHaveBeenCalled();
     (api.editIssue as any).mockResolvedValueOnce({ ok: false, error: { kind: 'forbidden', message: "solo l'autore può modificare il testo" } });
     button('Modifica')!.click();
+    shadow.querySelector<HTMLTextAreaElement>('.sr-edit textarea')!.value = 'Altro testo';
     shadow.querySelector<HTMLButtonElement>('.sr-edit .sr-btn:not(.sr-ghost)')!.click();
     await flush();
     expect(shadow.querySelector('.sr-edit')).not.toBeNull();
@@ -223,6 +224,45 @@ describe('modifica della segnalazione', () => {
     await composer.openThread('i1');
     expect(button('Modifica')).toBeUndefined();
     expect(shadow.querySelector('.sr-edited')!.textContent).toMatch(/^Modificata (il|alle)/);
+  });
+
+  it('in modifica si aggiungono immagini; con il testo invariato si caricano solo quelle', async () => {
+    const { api, composer } = setup();
+    api.getIssue.mockResolvedValue(detail());
+    api.uploadAttachment.mockResolvedValue({ ok: true, value: {} as never });
+    await composer.openThread('i1');
+    button('Modifica')!.click();
+    const edit = shadow.querySelector('.sr-edit')!;
+    expect([...edit.querySelectorAll('button')].map(b => b.textContent)).toEqual(['Aggiungi immagini', 'Salva modifiche', 'Annulla']);
+    expect(button('Elimina')!.closest<HTMLElement>('.sr-row')!.hidden).toBe(true);
+    const ta = edit.querySelector('textarea')!;
+    const ev = new Event('paste') as any;
+    ev.clipboardData = { files: [new File(['x'], 'shot.png', { type: 'image/png' })] };
+    ta.dispatchEvent(ev); await flush();
+    expect(edit.querySelectorAll('.sr-thumb').length).toBe(1);
+    button('Salva modifiche')!.click(); await flush(); await flush();
+    expect(api.editIssue).not.toHaveBeenCalled();
+    expect(api.uploadAttachment).toHaveBeenCalledTimes(1);
+    expect(api.uploadAttachment.mock.calls[0][2]).toBeNull();
+    expect(shadow.querySelector('.sr-edit')).toBeNull();
+  });
+
+  it('immagine non caricata in modifica: testo salvato, resta Riprova', async () => {
+    const { api, composer } = setup();
+    api.getIssue.mockResolvedValue(detail());
+    api.uploadAttachment.mockResolvedValueOnce({ ok: false, error: { kind: 'offline', message: ERROR_TEXT.offline } });
+    await composer.openThread('i1');
+    button('Modifica')!.click();
+    const edit = shadow.querySelector('.sr-edit')!;
+    const ta = edit.querySelector('textarea')!;
+    ta.value = 'Testo nuovo';
+    const ev = new Event('paste') as any;
+    ev.clipboardData = { files: [new File(['x'], 'shot.png', { type: 'image/png' })] };
+    ta.dispatchEvent(ev); await flush();
+    button('Salva modifiche')!.click(); await flush(); await flush();
+    expect(api.editIssue).toHaveBeenCalledWith('i1', 'Testo nuovo');
+    expect(shadow.querySelector('.sr-retry-att')).not.toBeNull();
+    expect(button('Chiudi')).toBeDefined();
   });
 
   it('senza modifiche non c\'è la dicitura', async () => {
