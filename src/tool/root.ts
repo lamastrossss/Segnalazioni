@@ -1,4 +1,5 @@
 import { TOOL_CSS } from './styles';
+import { keepOnTop } from './top-layer';
 
 export function mountRoot(doc: Document): { host: HTMLElement; shadow: ShadowRoot; destroy(): void } {
   const host = doc.createElement('div');
@@ -9,5 +10,6 @@ export function mountRoot(doc: Document): { host: HTMLElement; shadow: ShadowRoo
   style.textContent = TOOL_CSS;
   shadow.append(style);
   doc.documentElement.append(host);
-  return { host, shadow, destroy: () => host.remove() };
+  const release = keepOnTop(host, doc); // sempre in primo piano, anche sopra le modali del sito
+  return { host, shadow, destroy: () => { release(); host.remove(); } };
 }

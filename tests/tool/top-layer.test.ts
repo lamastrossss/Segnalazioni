@@ -1,0 +1,84 @@
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { keepOnTop } from '../../src/tool/top-layer';
+import { flush } from '../helpers/fake-deps';
+
+const proto = HTMLElement.prototype as any;
+const releases: (() => void)[] = [];
+afterEach(() => { releases.splice(0).forEach(r => r()); delete proto.showPopover; delete proto.hidePopover; document.body.replaceChildren(); document.querySelectorAll('#h').forEach(n => n.remove()); });
+
+/** jsdom non ha popover né :modal: li simuliamo. */
+function setup() {
+  const shows: Element[] = [];
+  proto.showPopover = vi.fn(function (this: Element) { shows.push(this); });
+  proto.hidePopover = vi.fn();
+  const host = document.createElement('div');
+  host.id = 'h';
+  document.documentElement.append(host);
+  const release = keepOnTop(host, document);
+  releases.push(release);
+  return { host, shows, release };
+}
+function modal() {
+  const d = document.createElement('dialog');
+  let modalOpen = false;
+  const matches = d.matches.bind(d);
+  (d as any).matches = (sel: string) => (sel === ':modal' ? modalOpen : matches(sel));
+  document.body.append(d);
+  return {
+    d,
+    open() { modalOpen = true; d.setAttribute('open', ''); },
+    close() { modalOpen = false; d.removeAttribute('open'); },
+  };
+}
+
+describe('tool sempre in primo piano', () => {
+  it('diventa un popover manuale ed è mostrato subito', () => {
+    const { host, shows } = setup();
+    expect(host.getAttribute('popover')).toBe('manual');
+    expect(shows).toEqual([host]);
+  });
+
+  it('con una dialog modale aperta (es. mini carrello) entra nella dialog e torna su; alla chiusura torna al suo posto', async () => {
+    const { host, shows } = setup();
+    const cart = modal();
+    cart.open(); await flush();
+    expect(host.parentNode).toBe(cart.d);
+    expect(shows.length).toBe(2);
+    cart.close(); await flush();
+    expect(host.parentNode).toBe(document.documentElement);
+    expect(shows.length).toBe(3);
+  });
+
+  it('una dialog non modale non lo sposta, ma lo rimette in cima', async () => {
+    const { host, shows } = setup();
+    const d = document.createElement('dialog');
+    document.body.append(d);
+    d.setAttribute('open', ''); await flush();
+    expect(host.parentNode).toBe(document.documentElement);
+    expect(shows.length).toBe(2);
+  });
+
+  it('due modali una sopra l\'altra: segue l\'ultima aperta', async () => {
+    const { host } = setup();
+    const a = modal(), b = modal();
+    a.open(); await flush();
+    b.open(); await flush();
+    expect(host.parentNode).toBe(b.d);
+    b.close(); await flush();
+    expect(host.parentNode).toBe(a.d);
+  });
+
+  it('i clic nel tool non arrivano ai gestori del sito (es. "clic fuori = chiudi carrello")', () => {
+    const { host, release } = setup();
+    const site = vi.fn();
+    document.addEventListener('click', site);
+    const btn = document.createElement('button');
+    host.append(btn);
+    btn.click();
+    expect(site).not.toHaveBeenCalled();
+    release();
+    btn.click();
+    expect(site).toHaveBeenCalledTimes(1);
+    document.removeEventListener('click', site);
+  });
+});
