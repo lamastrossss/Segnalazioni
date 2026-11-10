@@ -81,4 +81,41 @@ describe('tool sempre in primo piano', () => {
     expect(site).toHaveBeenCalledTimes(1);
     document.removeEventListener('click', site);
   });
+
+  it('se il sito ridisegna la modale e lo toglie dalla pagina, torna subito', async () => {
+    const { host, shows } = setup();
+    const search = modal();
+    search.open(); await flush();
+    expect(host.parentNode).toBe(search.d);
+    search.d.replaceChildren(document.createElement('input')); await flush();
+    expect(host.parentNode).toBe(search.d);
+    expect(shows.length).toBe(3);
+  });
+
+  it('se il sito toglie la modale aperta dalla pagina, torna al suo posto', async () => {
+    const { host } = setup();
+    const search = modal();
+    search.open(); await flush();
+    search.d.remove(); await flush();
+    expect(host.parentNode).toBe(document.documentElement);
+  });
+
+  it('se il sito chiude tutti i popover, si rimostra', async () => {
+    const { host, shows } = setup();
+    (host as any).matches = (sel: string) => (sel === ':popover-open' ? false : Element.prototype.matches.call(host, sel));
+    host.dispatchEvent(new Event('toggle'));
+    await flush();
+    expect(shows.length).toBe(2);
+  });
+
+  it('toglie inert, aria-hidden e hidden messi dal sito "su tutto il resto"', async () => {
+    const { host } = setup();
+    host.setAttribute('inert', '');
+    host.setAttribute('aria-hidden', 'true');
+    host.hidden = true;
+    await flush();
+    expect(host.hasAttribute('inert')).toBe(false);
+    expect(host.hasAttribute('aria-hidden')).toBe(false);
+    expect(host.hidden).toBe(false);
+  });
 });

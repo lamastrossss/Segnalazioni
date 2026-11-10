@@ -7,7 +7,13 @@
  * - il tool diventa un popover "manual" e si rimette in cima ogni volta che si apre qualcosa;
  * - mentre è aperta una dialog modale, il tool si sposta dentro quella dialog,
  *   così non è inerte e resta cliccabile; quando si chiude torna al suo posto.
+ * Si difende anche dai siti che, aprendo una modale o la ricerca:
+ * - ridisegnano il contenuto della modale (e così lo tolgono dalla pagina): torna al suo posto;
+ * - chiudono tutti i popover aperti: si rimostra;
+ * - rendono inerte o nascosto il resto della pagina: l'attributo sul tool viene tolto.
  */
+/** Attributi che i siti mettono "su tutto il resto" quando aprono una modale. */
+const BLOCKING = ['inert', 'aria-hidden', 'hidden'];
 const STOPPED = ['click', 'dblclick', 'auxclick', 'pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart', 'touchend', 'keydown', 'keyup', 'focusin', 'focusout'] as const;
 
 export function keepOnTop(host: HTMLElement, doc: Document): () => void {
@@ -25,6 +31,8 @@ export function keepOnTop(host: HTMLElement, doc: Document): () => void {
   const modals: HTMLDialogElement[] = []; // in ordine di apertura: l'ultima è quella in cima
 
   const isModal = (d: HTMLDialogElement) => { try { return d.open && d.isConnected && d.matches(':modal'); } catch { return false; } };
+
+  const isOpen = () => { try { return host.matches(':popover-open'); } catch { return true; } };
 
   let shown = false;
   function raise() {
@@ -48,17 +56,30 @@ export function keepOnTop(host: HTMLElement, doc: Document): () => void {
   };
 
   const mo = new MutationObserver(records => {
-    if (records.some(r => r.target !== host)) schedule();
+    if (!host.isConnected) { schedule(); return; } // tolto dalla pagina (es. modale ridisegnata)
+    if (records.some(r => r.type === 'attributes'
+      ? r.target !== host
+      : [...r.removedNodes].some(n => modals.includes(n as HTMLDialogElement)))) schedule();
   });
-  mo.observe(home, { subtree: true, attributes: true, attributeFilter: ['open'] });
+  mo.observe(home, { subtree: true, childList: true, attributes: true, attributeFilter: ['open'] });
+
+  const unblock = () => { for (const a of BLOCKING) if (host.hasAttribute(a)) host.removeAttribute(a); };
+  const guard = new MutationObserver(unblock);
+  guard.observe(host, { attributes: true, attributeFilter: BLOCKING });
+  unblock();
+
   // I popover del sito non cambiano attributi: si sentono dall'evento toggle (non risale, quindi in cattura)
-  const onToggle = (e: Event) => { if (e.target !== host) schedule(); };
+  const onToggle = (e: Event) => {
+    if (e.target !== host) schedule();
+    else if (!isOpen()) schedule(); // il sito ha chiuso anche il tool
+  };
   doc.addEventListener('toggle', onToggle, true);
 
   sync();
 
   return () => {
     mo.disconnect();
+    guard.disconnect();
     doc.removeEventListener('toggle', onToggle, true);
     unstop();
     try { host.hidePopover(); } catch { /* già chiuso */ }
