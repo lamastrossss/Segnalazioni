@@ -118,4 +118,15 @@ describe('tool sempre in primo piano', () => {
     expect(host.hasAttribute('aria-hidden')).toBe(false);
     expect(host.hidden).toBe(false);
   });
+
+  it('cliccando un pulsante del tool il campo del sito non perde il cursore; i campi di testo del tool sì', () => {
+    const { host } = setup();
+    const shadow = host.attachShadow({ mode: 'open' });
+    const btn = document.createElement('button');
+    const ta = document.createElement('textarea');
+    shadow.append(btn, ta);
+    const down = (t: Element) => { const e = new MouseEvent('mousedown', { bubbles: true, composed: true, cancelable: true }); t.dispatchEvent(e); return e.defaultPrevented; };
+    expect(down(btn)).toBe(true);
+    expect(down(ta)).toBe(false);
+  });
 });

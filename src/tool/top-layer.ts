@@ -10,18 +10,29 @@
  * Si difende anche dai siti che, aprendo una modale o la ricerca:
  * - ridisegnano il contenuto della modale (e così lo tolgono dalla pagina): torna al suo posto;
  * - chiudono tutti i popover aperti: si rimostra;
- * - rendono inerte o nascosto il resto della pagina: l'attributo sul tool viene tolto.
+ * - rendono inerte o nascosto il resto della pagina: l'attributo sul tool viene tolto;
+ * - chiudono la ricerca (o un menu) quando il campo perde il cursore: i clic sui pulsanti
+ *   del tool non lo spostano, solo i campi di testo del tool lo prendono.
  */
 /** Attributi che i siti mettono "su tutto il resto" quando aprono una modale. */
 const BLOCKING = ['inert', 'aria-hidden', 'hidden'];
 const STOPPED = ['click', 'dblclick', 'auxclick', 'pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart', 'touchend', 'keydown', 'keyup', 'focusin', 'focusout'] as const;
+
+function isTextField(t: EventTarget | undefined): boolean {
+  const el = t as HTMLElement | undefined;
+  if (!el || el.nodeType !== 1) return false;
+  return /^(INPUT|TEXTAREA|SELECT|OPTION)$/.test(el.tagName) || el.isContentEditable;
+}
 
 export function keepOnTop(host: HTMLElement, doc: Document): () => void {
   // I clic nel tool non arrivano ai gestori del sito ("clic fuori dal carrello = chiudi", trappole del focus…).
   // Il tool ascolta in fase di cattura sulla finestra, quindi non ne risente.
   const stop = (e: Event) => e.stopPropagation();
   for (const t of STOPPED) host.addEventListener(t, stop);
-  const unstop = () => { for (const t of STOPPED) host.removeEventListener(t, stop); };
+  // Il clic su un pulsante del tool non toglie il cursore al campo del sito (es. ricerca aperta)
+  const keepFocus = (e: Event) => { if (!isTextField(e.composedPath()[0])) e.preventDefault(); };
+  host.addEventListener('mousedown', keepFocus);
+  const unstop = () => { for (const t of STOPPED) host.removeEventListener(t, stop); host.removeEventListener('mousedown', keepFocus); };
 
   const canPopover = typeof (host as HTMLElement & { showPopover?: unknown }).showPopover === 'function';
   if (!canPopover) return unstop;
