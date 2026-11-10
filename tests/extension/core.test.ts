@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { isScriptable, originOf, pageLoader, isActiveProbe, createController } from '../../extension/lib/core.js';
+import { isScriptable, originOf, pageLoader, isActiveProbe, isolatedToggle, prepareBundled, createController } from '../../extension/lib/core.js';
 import { createFakeChrome } from '../helpers/fake-chrome';
 
 const TOOL = 'https://lamastrossss.github.io/Segnalazioni/tool.js';
@@ -18,13 +18,27 @@ describe('pagine scriptabili', () => {
 });
 
 describe('controller', () => {
-  it('toggle inietta prima il ponte, poi il loader nel mondo MAIN', async () => {
+  it('toggle inietta prima il ponte, controlla la copia interna, poi il loader nel mondo MAIN', async () => {
     const f = createFakeChrome();
     const c = createController(f.chrome, { toolUrl: TOOL });
     expect(await c.toggle(tab)).toBe('opened');
-    expect(f.calls.map(x => [x.files?.[0] ?? x.func.name, x.world ?? 'ISOLATED', x.args?.[1]]))
-      .toEqual([['bridge.js', 'ISOLATED', undefined], ['pageLoader', 'MAIN', 'toggle']]);
-    expect(f.calls[1].args[0]).toBe(TOOL);
+    expect(f.steps()).toEqual([['bridge.js', 'ISOLATED'], ['isolatedToggle', 'ISOLATED'], ['pageLoader', 'MAIN']]);
+    expect(f.calls[2].args).toEqual([TOOL, 'toggle']);
+  });
+  it('se il sito blocca il tool online avvia la copia inclusa nel mondo isolato, con la modalità', async () => {
+    const f = createFakeChrome();
+    f.setPageResult((inj: any) => (inj.func.name === 'isolatedToggle' ? 'none' : inj.func.name === 'pageLoader' ? 'blocked' : undefined));
+    const c = createController(f.chrome, { toolUrl: TOOL });
+    expect(await c.toggle(tab)).toBe('opened');
+    expect(f.steps()).toEqual([['bridge.js', 'ISOLATED'], ['isolatedToggle', 'ISOLATED'], ['pageLoader', 'MAIN'], ['prepareBundled', 'ISOLATED'], ['tool.js', 'ISOLATED']]);
+    expect(f.calls[3].args).toEqual(['toggle']);
+  });
+  it('se la copia interna è già aperta, toggle la chiude senza toccare la pagina', async () => {
+    const f = createFakeChrome();
+    f.setPageResult((inj: any) => (inj.func.name === 'isolatedToggle' ? 'closed' : 'opened'));
+    const c = createController(f.chrome, { toolUrl: TOOL });
+    expect(await c.toggle(tab)).toBe('closed');
+    expect(f.injections()).toHaveLength(0);
   });
   it('su pagine non scriptabili non inietta', async () => {
     const f = createFakeChrome();
@@ -83,14 +97,35 @@ describe('controller', () => {
     expect(await createController(f.chrome, { toolUrl: TOOL }).isActive(tab)).toBe(true);
     expect(f.calls[0].func).toBe(isActiveProbe);
   });
+  it('isActive vede anche la copia interna (mondo isolato) e poi la pagina', async () => {
+    const f = createFakeChrome();
+    f.setPageResult((inj: any) => inj.world === 'MAIN');
+    expect(await createController(f.chrome, { toolUrl: TOOL }).isActive(tab)).toBe(true);
+    expect(f.calls.map(x => x.world)).toEqual(['ISOLATED', 'MAIN']);
+    f.setPageResult(() => false);
+    expect(await createController(f.chrome, { toolUrl: TOOL }).isActive(tab)).toBe(false);
+  });
 });
 
 describe('pageLoader (eseguito nella pagina)', () => {
   afterEach(() => { delete (window as any).__stageReview; delete (window as any).__stageReviewLoading; document.querySelectorAll('script').forEach(s => s.remove()); });
-  it('apre aggiungendo lo script e segnando il caricamento', () => {
-    expect(pageLoader(TOOL, 'auto')).toBe('opened');
+  it('apre aggiungendo lo script, segna il caricamento e risponde a script caricato', async () => {
+    const r = pageLoader(TOOL, 'auto');
     expect((window as any).__stageReviewLoading).toBe(true);
-    expect(document.querySelector('script')!.src).toMatch(/tool\.js\?v=\d+&auto=1$/);
+    const s = document.querySelector('script')!;
+    expect(s.src).toMatch(/tool\.js\?v=\d+&auto=1$/);
+    s.dispatchEvent(new Event('load'));
+    expect(await r).toBe('opened');
+  });
+  it('se il sito blocca lo script risponde "blocked", senza avvisi, e libera il caricamento', async () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    const r = pageLoader(TOOL, 'toggle');
+    document.querySelector('script')!.dispatchEvent(new Event('error'));
+    expect(await r).toBe('blocked');
+    expect((window as any).__stageReviewLoading).toBe(false);
+    expect(document.querySelector('script')).toBeNull();
+    expect(alert).not.toHaveBeenCalled();
+    alert.mockRestore();
   });
   it('in toggle chiude un tool aperto, in auto lo lascia (Review Focus 1)', () => {
     const destroy = vi.fn();
@@ -104,5 +139,26 @@ describe('pageLoader (eseguito nella pagina)', () => {
     (window as any).__stageReviewLoading = true;
     expect(pageLoader(TOOL, 'toggle')).toBe('loading');
     expect(document.querySelectorAll('script')).toHaveLength(0);
+  });
+});
+
+describe('copia interna (eseguita nel mondo isolato)', () => {
+  afterEach(() => { for (const k of ['__stageReview', '__stageReviewLoading', '__stageReviewAuto']) delete (window as any)[k]; });
+  it('isolatedToggle: niente tool → none; aperto → chiude in toggle, resta in auto', () => {
+    expect(isolatedToggle('toggle')).toBe('none');
+    const destroy = vi.fn();
+    (window as any).__stageReview = { destroy };
+    expect(isolatedToggle('auto')).toBe('active');
+    expect(destroy).not.toHaveBeenCalled();
+    expect(isolatedToggle('toggle')).toBe('closed');
+    expect(destroy).toHaveBeenCalled();
+  });
+  it('prepareBundled passa la modalità al tool e segna il caricamento', () => {
+    prepareBundled('auto');
+    expect((window as any).__stageReviewAuto).toBe(true);
+    expect((window as any).__stageReviewLoading).toBe(true);
+    expect(isolatedToggle('toggle')).toBe('loading');
+    prepareBundled('toggle');
+    expect((window as any).__stageReviewAuto).toBe(false);
   });
 });

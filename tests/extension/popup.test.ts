@@ -24,7 +24,7 @@ describe('menu dell\'icona', () => {
     expect(q('#sr-toggle')!.textContent).toBe('Chiudi Stage Review');
   });
   it('il pulsante apre il tool e chiude il menu', async () => {
-    const f = createFakeChrome({ activeTab: { id: 1, url }, pageResult: (inj: any) => (inj.args ? 'opened' : false) });
+    const f = createFakeChrome({ activeTab: { id: 1, url }, pageResult: (inj: any) => (inj.func.name === 'pageLoader' ? 'opened' : inj.func.name === 'isolatedToggle' ? 'none' : false) });
     await initPopup(document, f.chrome, opts);
     expect(q('#sr-toggle')!.textContent).toBe('Apri Stage Review');
     q('#sr-toggle')!.click(); await flush();
@@ -42,7 +42,7 @@ describe('menu dell\'icona', () => {
     expect(f.granted.size).toBe(0);
   });
   it('permesso concesso: salva il sito, apre il tool e mostra ON', async () => {
-    const f = createFakeChrome({ activeTab: { id: 1, url }, pageResult: (inj: any) => (inj.args ? 'opened' : false) });
+    const f = createFakeChrome({ activeTab: { id: 1, url }, pageResult: (inj: any) => (inj.func.name === 'pageLoader' ? 'opened' : inj.func.name === 'isolatedToggle' ? 'none' : false) });
     await initPopup(document, f.chrome, opts);
     const box = q<HTMLInputElement>('#sr-always')!;
     box.checked = true; box.dispatchEvent(new Event('change')); await flush(); await flush();

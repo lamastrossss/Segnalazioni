@@ -14,7 +14,7 @@ describe('pacchetto dell\'estensione', () => {
     const { version } = JSON.parse(readFileSync(p('extension/manifest.json'), 'utf8'));
     expect(JSON.parse(readFileSync(p('dist/extension-version.json'), 'utf8'))).toEqual({ version });
     const list = execFileSync('unzip', ['-l', p('dist/stage-review-estensione.zip')]).toString();
-    for (const f of ['manifest.json', 'background.js', 'bridge.js', 'popup.html', 'popup.js', 'popup.css', 'config.js', 'lib/core.js', 'lib/popup.js', 'icons/icon128.png']) {
+    for (const f of ['manifest.json', 'background.js', 'bridge.js', 'popup.html', 'popup.js', 'popup.css', 'config.js', 'lib/core.js', 'lib/popup.js', 'icons/icon128.png', 'tool.js']) {
       expect(list).toContain(`stage-review-estensione/${f}`);
     }
   }, 30_000);

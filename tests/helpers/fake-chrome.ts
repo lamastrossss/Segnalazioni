@@ -10,7 +10,11 @@ export function createFakeChrome(opts: { activeTab?: { id: number; url: string; 
       executeScript: async (inj: any) => {
         calls.push(inj);
         if (inj.files) return [{ result: undefined }];
-        return [{ result: typeof pageResult === 'function' ? (pageResult as any)(inj) : pageResult }];
+        if (typeof pageResult === 'function') return [{ result: (pageResult as any)(inj) }];
+        // la copia interna (mondo isolato) di norma non è aperta
+        if (inj.func?.name === 'isolatedToggle') return [{ result: 'none' }];
+        if (inj.func?.name === 'prepareBundled') return [{ result: undefined }];
+        return [{ result: pageResult }];
       },
     },
     storage: { sync: {
@@ -33,7 +37,10 @@ export function createFakeChrome(opts: { activeTab?: { id: number; url: string; 
     chrome, calls, store, granted, badges,
     grant: (o: string) => granted.add(o),
     setPageResult: (r: unknown) => { pageResult = r; },
-    injections: () => calls.filter(c => c.func),
-    lastMode: () => calls.filter(c => c.func).at(-1)?.args?.[1],
+    /** Avvii del tool online (loader nel mondo MAIN). */
+    injections: () => calls.filter(c => c.func?.name === 'pageLoader'),
+    lastMode: () => calls.filter(c => c.func?.name === 'pageLoader').at(-1)?.args?.[1],
+    /** Passi in ordine: nome del file o della funzione e mondo. */
+    steps: () => calls.map(c => [c.files?.[0] ?? c.func.name, c.world ?? 'ISOLATED']),
   };
 }

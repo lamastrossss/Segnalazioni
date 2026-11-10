@@ -1,10 +1,13 @@
 // Tipi per i test TypeScript (l'estensione è JavaScript semplice).
 export type Mode = 'toggle' | 'auto';
 export type LoadResult = 'opened' | 'closed' | 'active' | 'loading';
+export const BUNDLED_TOOL: string;
 export interface Tab { id?: number; url?: string; windowId?: number; active?: boolean }
 export function isScriptable(url: unknown): boolean;
 export function originOf(url: string): string;
-export function pageLoader(toolUrl: string, mode: Mode): LoadResult;
+export function pageLoader(toolUrl: string, mode: Mode): LoadResult | Promise<'opened' | 'blocked'>;
+export function isolatedToggle(mode: Mode): LoadResult | 'none';
+export function prepareBundled(mode: Mode): void;
 export function isActiveProbe(): boolean;
 export interface Controller {
   inject(tabId: number, mode: Mode): Promise<LoadResult | 'error'>;

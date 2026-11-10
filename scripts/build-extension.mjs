@@ -21,9 +21,14 @@ for (const f of referenced) {
   if (!existsSync(join(src, f))) throw new Error(`File mancante nell'estensione: ${f}`);
 }
 
+// Copia del tool inclusa nell'estensione: si usa sui siti che bloccano quella online (es. checkout)
+const tool = join(dist, 'tool.js');
+if (!existsSync(tool)) throw new Error('Manca dist/tool.js: esegui prima la build del tool (npm run build).');
+
 mkdirSync(dist, { recursive: true });
 rmSync(out, { recursive: true, force: true });
 cpSync(src, out, { recursive: true, filter: f => !f.endsWith('.d.ts') && !f.endsWith('.DS_Store') });
+cpSync(tool, join(out, 'tool.js'));
 
 const zip = join(dist, `${name}.zip`);
 rmSync(zip, { force: true });
