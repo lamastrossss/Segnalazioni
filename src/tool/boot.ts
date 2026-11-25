@@ -2,6 +2,7 @@ import type { Api } from '../shared/api';
 import type { Auth } from '../shared/auth';
 import type { LiveAdapter } from '../shared/live';
 import { createApi } from '../shared/api';
+import { browserStore } from '../shared/url-cache';
 import { createAuth } from '../shared/auth';
 import { createLive } from '../shared/live';
 import { getClient } from '../shared/supabase';
@@ -42,7 +43,7 @@ export async function boot(win: Window, deps: Partial<BootDeps> = {}, opts: { au
 
   const needsClient = !deps.api || !deps.auth || !deps.live;
   const client = needsClient ? getClient() : null;
-  const api = deps.api ?? createApi(client!);
+  const api = deps.api ?? createApi(client!, { linkStore: browserStore(win, 'local') });
   const auth = deps.auth ?? createAuth(client!);
   const live = deps.live ?? createLive(client!);
 

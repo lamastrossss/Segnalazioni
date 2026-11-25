@@ -68,7 +68,10 @@ function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: 
     log.push({ method, path: u.pathname, body });
     if (u.pathname === '/storage/v1/object/sign/media') {
       if (opts.failSign) return json({ message: 'no' }, 500);
-      return json(body.paths.map((p: string) => ({ path: p, signedURL: `/object/sign/media/${p}?token=t`, error: null })));
+      // come Supabase: per un oggetto che non esiste (miniatura mai creata) niente link e un errore
+      return json(body.paths.map((p: string) => (/\/thumb-/.test(p)
+        ? { path: p, signedURL: null, error: 'Either the object does not exist or you do not have access to it' }
+        : { path: p, signedURL: `/object/sign/media/${p}?token=t`, error: null })));
     }
     if (u.pathname === '/rest/v1/profiles') return json(db.profiles);
     if (u.pathname === '/rest/v1/projects' && method === 'get') return json(db.projects);
@@ -171,7 +174,7 @@ describe('archivio su Fogli Google', () => {
     env.run();
     const signs = env.log.filter(l => l.path === '/storage/v1/object/sign/media');
     expect(signs).toHaveLength(1);
-    expect(signs[0].body).toEqual({ expiresIn: 315360000, paths: ['p1/i1/screenshot.jpg', 'p1/i1/a1.jpg'] });
+    expect(signs[0].body).toEqual({ expiresIn: 315360000, paths: ['p1/i1/screenshot.jpg', 'p1/i1/thumb-screenshot.jpg', 'p1/i1/a1.jpg'] });
     const rt = sheetOf(env).rich.get('2,11')!;
     expect(rt.text).toBe('Immagine 1');
     expect(sheetOf(env).rich.get('2,9')).toEqual({ text: 'Apri', links: [{ start: 0, end: 4, url: 'https://sb.test/storage/v1/object/sign/media/p1/i1/screenshot.jpg?token=t' }] });

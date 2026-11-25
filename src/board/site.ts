@@ -75,7 +75,7 @@ function row(i: Issue) {
     thumb: async path => {
       const cached = thumbs.get(path);
       if (cached) return cached;
-      const u = await api.signedUrl(path);
+      const u = await api.thumbUrl(path);
       if (!u.ok) return null;
       thumbs.set(path, u.value);
       return u.value;

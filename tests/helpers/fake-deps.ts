@@ -27,6 +27,7 @@ export function fakeApi(issues: Issue[] = []) {
     softDeleteIssue: vi.fn(() => okv(undefined)),
     softDeleteReply: vi.fn(() => okv(undefined)),
     signedUrl: vi.fn((p: string) => okv(`https://signed/${p}`)),
+    thumbUrl: vi.fn((p: string) => okv(`https://thumb/${p}`)),
     profiles: vi.fn(() => okv([ME])),
     archiveStatus: vi.fn(() => okv({ last_run_at: null, last_ok_at: null, last_error: null })),
     totalUsageBytes: vi.fn(() => okv(0)),

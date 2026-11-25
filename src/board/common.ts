@@ -1,5 +1,6 @@
 import { getClient } from '../shared/supabase';
 import { createApi } from '../shared/api';
+import { browserStore } from '../shared/url-cache';
 import { createAuth } from '../shared/auth';
 import { createLive } from '../shared/live';
 import { renderAuthForm, renderChangePassword } from '../shared/auth-ui';
@@ -15,7 +16,7 @@ export async function initBoard(title: string) {
   document.head.append(style);
 
   const client = getClient();
-  const api = createApi(client);
+  const api = createApi(client, { linkStore: browserStore(window, 'local') });
   const auth = createAuth(client);
   const live = createLive(client);
 

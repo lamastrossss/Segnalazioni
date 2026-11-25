@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'node:module';
 
-const { SR_COLUMNS, buildRow, srSafeText, srImagePaths } = createRequire(import.meta.url)('../../archive/format.js');
+const { SR_COLUMNS, buildRow, srSafeText, srImagePaths, srThumbPath } = createRequire(import.meta.url)('../../archive/format.js');
 
 const profiles = { u1: { id: 'u1', name: 'Alessandra' }, u2: { id: 'u2', name: 'Marco' } };
 const iss = {
@@ -56,7 +56,7 @@ describe('riga del foglio', () => {
     expect(values[10]).toBe('Immagine 1, Risposta di Marco 1');
     expect(links.find((l: any) => l.col === 11)).toEqual({ col: 11, parts: [
       { label: 'Immagine 1', url: 'https://sb/a1' }, { label: 'Risposta di Marco 1', url: 'https://sb/r1' }] });
-    expect(srImagePaths(issue)).toEqual(['p/i1/screenshot.jpg', 'p/i1/a1.jpg', 'p/i1/r1.jpg']);
+    expect(srImagePaths(issue)).toEqual(['p/i1/screenshot.jpg', 'p/i1/thumb-screenshot.jpg', 'p/i1/a1.jpg', 'p/i1/r1.jpg']);
   });
 
   it('senza screenshot: celle vuote e nessun link', () => {
@@ -85,5 +85,14 @@ describe('riga del foglio', () => {
     const { values } = buildRow({ ...iss, edited_at: '2026-11-06T08:30:00Z' }, profiles, 'Europe/Rome', urls);
     expect(values[6]).toBe('04/11/2026 10:12 · modificata 06/11/2026 09:30');
   });
-});
 
+  it('nella cella IMAGE usa la miniatura se c\'è, "Apri" porta sempre all\'originale', () => {
+    expect(srThumbPath('p/i1/screenshot.jpg')).toBe('p/i1/thumb-screenshot.jpg');
+    const issue = { id: 'i1', number: 1, status: 'open', page_path: '/', viewport_class: 'desktop', viewport_width: 1440, body: 'x', author_id: 'u1', created_at: '2026-11-05T10:00:00Z', page_url: 'https://s/', screenshot_path: 'p/i1/screenshot.jpg', replies: [], attachments: [] };
+    const withThumb = buildRow(issue, {}, 'Europe/Rome', { 'p/i1/screenshot.jpg': 'https://full', 'p/i1/thumb-screenshot.jpg': 'https://small' });
+    expect(withThumb.values[9]).toBe('=IMAGE("https://small")');
+    expect(withThumb.links[0].parts[0].url).toBe('https://full');
+    const old = buildRow(issue, {}, 'Europe/Rome', { 'p/i1/screenshot.jpg': 'https://full' });
+    expect(old.values[9]).toBe('=IMAGE("https://full")');
+  });
+});

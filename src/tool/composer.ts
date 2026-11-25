@@ -128,6 +128,18 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
     textarea.focus();
   }
 
+  /** Mostra la miniatura leggera; l'originale si scarica solo cliccando per ingrandire. */
+  function showImage(img: HTMLImageElement, path: string) {
+    img.loading = 'lazy';
+    img.addEventListener('click', () => { void api.signedUrl(path).then(u => { if (u.ok) lightbox(u.value); }); });
+    img.addEventListener('error', () => {
+      if (img.dataset.full) return; // anche l'originale non si carica
+      img.dataset.full = '1';
+      void api.signedUrl(path).then(u => { if (u.ok) img.src = u.value; });
+    }, { once: false });
+    void api.thumbUrl(path).then(u => { if (u.ok) img.src = u.value; });
+  }
+
   function images(container: HTMLElement, atts: Attachment[]) {
     if (!atts.length) return;
     const row = el('div', { class: 'sr-thumbs' });
@@ -135,7 +147,7 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
     for (const a of atts) {
       const img = el('img', { attrs: { alt: 'Allegato' } });
       row.append(el('div', { class: 'sr-thumb' }, [img]));
-      void api.signedUrl(a.path).then(u => { if (u.ok) { img.src = u.value; img.addEventListener('click', () => lightbox(u.value)); } });
+      showImage(img, a.path);
     }
   }
 
@@ -229,7 +241,7 @@ export function createComposer(shadow: ShadowRoot, deps: ComposerDeps) {
     if (issue.screenshot_path) {
       const shot = el('img', { class: 'sr-shot', attrs: { alt: 'Screenshot della segnalazione' } });
       body.append(shot);
-      void api.signedUrl(issue.screenshot_path).then(u => { if (u.ok) { shot.src = u.value; shot.addEventListener('click', () => lightbox(u.value)); } });
+      showImage(shot, issue.screenshot_path);
     }
     images(body, issue.attachments);
 

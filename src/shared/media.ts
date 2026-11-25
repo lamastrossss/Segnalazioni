@@ -6,6 +6,11 @@ export const MAX_ATTACHMENTS = 5;
 export const MAX_GIF_BYTES = 2 * 1024 * 1024;
 export const ATTACHMENT_MAX_SIDE = 2000;
 export const ATTACHMENT_TARGET_BYTES = 500_000;
+/** Miniature: abbastanza nitide per il pannello del tool, leggere (30–50 KB) per board e archivio. */
+export const THUMB_MAX_SIDE = 640;
+export const THUMB_QUALITY = 0.7;
+/** Le immagini non cambiano mai (nomi unici): il browser può tenerle per un anno. */
+export const IMAGE_CACHE_SECONDS = '31536000';
 const RECOMPRESSED = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
 export const REJECTION_TEXT: Record<RejectionReason, string> = {
@@ -92,4 +97,23 @@ export async function encodeCanvas(
     }
   }
   return { blob, width, height, bytes: blob.size, ext: 'jpg', name: 'immagine.jpg' };
+}
+
+/** Percorso della miniatura di un'immagine: stessa cartella, prefisso thumb-, sempre JPEG. */
+export function thumbPathOf(path: string): string {
+  const slash = path.lastIndexOf('/');
+  const dir = path.slice(0, slash + 1), file = path.slice(slash + 1);
+  return `${dir}thumb-${file.replace(/\.[^.]+$/, '')}.jpg`;
+}
+
+/** Miniatura JPEG di un'immagine (per le GIF, il primo fotogramma). */
+export async function makeThumb(blob: Blob): Promise<PreparedImage> {
+  const bmp = await createImageBitmap(blob);
+  const canvas = new OffscreenCanvas(bmp.width, bmp.height);
+  const g = canvas.getContext('2d')!;
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, bmp.width, bmp.height);
+  g.drawImage(bmp, 0, 0);
+  bmp.close();
+  return encodeCanvas(canvas, { maxSide: THUMB_MAX_SIDE, quality: THUMB_QUALITY });
 }

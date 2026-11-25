@@ -49,7 +49,7 @@ const api = {
   setStatus: async (id: string, s: Issue['status']) => { issues.get(id)!.status = s; return { ok: true as const, value: undefined }; },
   softDeleteIssue: async (id: string) => { issues.get(id)!.deleted_at = now(); return { ok: true as const, value: undefined }; },
   softDeleteReply: () => ok(undefined),
-  signedUrl: (p: string) => ok(p), profiles: () => ok([me, marco]),
+  signedUrl: (p: string) => ok(p), thumbUrl: (p: string) => ok(p), profiles: () => ok([me, marco]),
   archiveStatus: () => ok({ last_run_at: null, last_ok_at: null, last_error: null }), totalUsageBytes: () => ok(0),
 } as unknown as Api;
 

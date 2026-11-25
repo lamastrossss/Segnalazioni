@@ -8,7 +8,8 @@ type Handler = (call: FakeCall) => Response | Promise<Response>;
 
 export function createFakeSupabase() {
   const calls: FakeCall[] = [];
-  const uploads: { path: string; blob: Blob; contentType?: string }[] = [];
+  const uploads: { path: string; blob: Blob; contentType?: string; cacheControl?: string }[] = [];
+  const signs: string[] = [];
   const handlers = new Map<string, Handler>();
   let failUpload: (path: string) => boolean = () => false;
   let session: { user: { id: string; email: string } } | null = null;
@@ -43,12 +44,17 @@ export function createFakeSupabase() {
     rpc: async (fn: string) => (handlers.get(`rpc:${fn}`)?.({ table: fn, op: 'select', filters: [] }) ?? { data: null, error: null }),
     storage: {
       from: () => ({
-        upload: async (path: string, blob: Blob, opts?: { contentType?: string }) => {
+        upload: async (path: string, blob: Blob, opts?: { contentType?: string; cacheControl?: string }) => {
           if (failUpload(path)) return { data: null, error: { message: 'upload failed', statusCode: '500' } };
-          uploads.push({ path, blob, contentType: opts?.contentType });
+          uploads.push({ path, blob, contentType: opts?.contentType, cacheControl: opts?.cacheControl });
           return { data: { path }, error: null };
         },
-        createSignedUrl: async (p: string, s: number) => ({ data: { signedUrl: `https://signed/${p}?t=${s}` }, error: null }),
+        createSignedUrl: async (p: string, s: number) => {
+          signs.push(p);
+          // le miniature esistono solo se caricate (come su Supabase: "Object not found")
+          if (/\/thumb-[^/]+$/.test(p) && !uploads.some(u => u.path === p)) return { data: null, error: { message: 'Object not found', statusCode: '404' } };
+          return { data: { signedUrl: `https://signed/${p}?t=${s}` }, error: null };
+        },
       }),
     },
     auth: {
@@ -76,7 +82,7 @@ export function createFakeSupabase() {
 
   return {
     client: client as never,
-    calls, uploads,
+    calls, uploads, signs,
     on(key: string, h: Handler) { handlers.set(key, h); },
     failUploadWhen(f: (path: string) => boolean) { failUpload = f; },
     setSession(s: typeof session) { session = s; },

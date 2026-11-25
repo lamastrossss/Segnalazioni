@@ -43,9 +43,15 @@ function srAttachments(issue) {
   return (issue.attachments || []).filter(function (a) { return !a.deleted_at; }).sort(srByCreated);
 }
 
-/** Percorsi delle immagini da firmare: screenshot e allegati non eliminati. */
+/** Miniatura leggera di un'immagine (creata dal tool): stessa cartella, prefisso thumb-, .jpg. */
+function srThumbPath(path) {
+  var slash = path.lastIndexOf('/');
+  return path.slice(0, slash + 1) + 'thumb-' + path.slice(slash + 1).replace(/\.[^.]+$/, '') + '.jpg';
+}
+
+/** Percorsi delle immagini da firmare: screenshot (e sua miniatura) e allegati non eliminati. */
 function srImagePaths(issue) {
-  var paths = issue.screenshot_path ? [issue.screenshot_path] : [];
+  var paths = issue.screenshot_path ? [issue.screenshot_path, srThumbPath(issue.screenshot_path)] : [];
   srAttachments(issue).forEach(function (a) { paths.push(a.path); });
   return paths;
 }
@@ -77,6 +83,8 @@ function srRepliesText(issue, profilesById, tz) {
  */
 function buildRow(issue, profilesById, tz, urls) {
   var shot = issue.screenshot_path ? urls[issue.screenshot_path] || null : null;
+  // Nella cella si vede la miniatura (meno traffico su Supabase); "Apri" porta all'originale
+  var preview = shot ? urls[srThumbPath(issue.screenshot_path)] || shot : null;
   var attachments = srAttachmentLinks(issue, profilesById, urls);
   var site = srFocusUrl(issue);
   var values = [
@@ -89,7 +97,7 @@ function buildRow(issue, profilesById, tz, urls) {
     srFormatDate(issue.created_at, tz) + (issue.edited_at ? ' · modificata ' + srFormatDate(issue.edited_at, tz) : ''),
     srSafeText(srRepliesText(issue, profilesById, tz)),
     shot ? 'Apri' : '',
-    shot ? '=IMAGE(' + srQuote(shot) + ')' : '',
+    preview ? '=IMAGE(' + srQuote(preview) + ')' : '',
     attachments.map(function (a) { return a.label; }).join(', '),
     'Apri',
     issue.id,
@@ -102,7 +110,7 @@ function buildRow(issue, profilesById, tz, urls) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { SR_COLUMNS: SR_COLUMNS, SR_COL: SR_COL, buildRow: buildRow, srSafeText: srSafeText, srImagePaths: srImagePaths, srFormatDate: srFormatDate };
+  module.exports = { SR_COLUMNS: SR_COLUMNS, SR_COL: SR_COL, buildRow: buildRow, srSafeText: srSafeText, srImagePaths: srImagePaths, srThumbPath: srThumbPath, srFormatDate: srFormatDate };
 }
 
 /* Stage Review — archivio su Fogli Google: sincronizzazione Supabase → un foglio per sito.

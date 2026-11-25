@@ -18,7 +18,7 @@ const TITLE_LEN = 120;
 /** Riga dell'elenco della board. Sulle proprie segnalazioni c'è "Modifica" per correggere il testo senza aprire il dettaglio. */
 export function renderIssueRow(i: Issue, deps: IssueRowDeps): HTMLLIElement {
   const mine = deps.me()?.id === i.author_id && !i.deleted_at;
-  const img = el('img', { class: 'thumb', attrs: { alt: '' } });
+  const img = el('img', { class: 'thumb', attrs: { alt: '', loading: 'lazy' } });
   if (i.screenshot_path) void deps.thumb(i.screenshot_path).then(u => { if (u) img.src = u; });
 
   const chips = el('div', { class: 'chips' }, [

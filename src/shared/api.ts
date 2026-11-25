@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Anchor, ArchiveStatus, Attachment, Issue, IssueDetail, IssueStatus, Profile, Project, Reply, ViewportClass } from './types';
-import { mimeOf, type PreparedImage } from './media';
+import { IMAGE_CACHE_SECONDS, makeThumb, mimeOf, thumbPathOf, type PreparedImage } from './media';
+import { createUrlCache } from './url-cache';
 import { classifyError, fail, ok, type Result } from './errors';
 import { probeSupabase } from './supabase';
 import { normalizeStage } from './stage-url';
@@ -14,7 +15,8 @@ export interface ProjectSummary extends Project {
 }
 
 const BUCKET = 'media';
-const SIGNED_URL_SECONDS = 3600;
+/** Link alle immagini validi una settimana: riusati finché manca più di un giorno alla scadenza. */
+const SIGNED_URL_SECONDS = 7 * 24 * 3600;
 const ISSUE_COLS = '*, replies(id, deleted_at)';
 
 type Row = Record<string, any>;
@@ -37,8 +39,75 @@ function mediaPath(issue: Pick<Issue, 'id' | 'project_id'>, file: string) {
   return `${issue.project_id}/${issue.id}/${file}`;
 }
 
-export function createApi(client: SupabaseClient) {
+export interface ApiOptions {
+  /** Dove ricordare i link alle immagini tra una visita e l'altra (localStorage sulla board). */
+  linkStore?: Storage | null;
+  /** Crea la miniatura di un'immagine (sostituibile nei test). */
+  thumb?: (blob: Blob) => Promise<PreparedImage>;
+  fetchBlob?: (url: string) => Promise<Blob>;
+}
+
+export function createApi(client: SupabaseClient, opts: ApiOptions = {}) {
   const storage = () => client.storage.from(BUCKET);
+  const links = createUrlCache(opts.linkStore ?? null);
+  const thumbOf = opts.thumb ?? makeThumb;
+  const fetchBlob = opts.fetchBlob ?? (async (url: string) => {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.blob();
+  });
+  const pendingThumbs = new Map<string, Promise<Result<string>>>();
+
+  async function sign(path: string): Promise<Result<string>> {
+    const cached = links.get(path);
+    if (cached) return ok(cached);
+    try {
+      const { data, error } = await storage().createSignedUrl(path, SIGNED_URL_SECONDS);
+      if (error || !data) return asError(error);
+      links.set(path, data.signedUrl, Date.now() + SIGNED_URL_SECONDS * 1000);
+      return ok(data.signedUrl);
+    } catch (e) { return asError(e); }
+  }
+
+  /** Carica un'immagine (sempre nuova, nome unico) e, se riesce, la sua miniatura. */
+  async function putImage(path: string, blob: Blob, contentType: string): Promise<{ error: unknown }> {
+    const up = await storage().upload(path, blob, { contentType, upsert: false, cacheControl: IMAGE_CACHE_SECONDS });
+    if (up.error) return { error: up.error };
+    try {
+      const t = await thumbOf(blob);
+      await storage().upload(thumbPathOf(path), t.blob, { contentType: 'image/jpeg', upsert: false, cacheControl: IMAGE_CACHE_SECONDS });
+    } catch { /* niente miniatura: verrà creata la prima volta che serve */ }
+    return { error: null };
+  }
+
+  /**
+   * Link alla miniatura. Le immagini caricate prima delle miniature non ce l'hanno:
+   * la prima persona che la vede la crea (scaricando l'originale una volta sola) e la salva per tutti.
+   */
+  function thumbUrl(path: string): Promise<Result<string>> {
+    const tp = thumbPathOf(path);
+    const cached = links.get(tp);
+    if (cached) return Promise.resolve(ok(cached));
+    let p = pendingThumbs.get(tp);
+    if (!p) {
+      p = (async () => {
+        const existing = await sign(tp);
+        if (existing.ok) return existing;
+        const full = await sign(path);
+        if (!full.ok) return full;
+        try {
+          const t = await thumbOf(await fetchBlob(full.value));
+          await storage().upload(tp, t.blob, { contentType: 'image/jpeg', upsert: false, cacheControl: IMAGE_CACHE_SECONDS });
+          const made = await sign(tp);
+          return made.ok ? made : full;
+        } catch {
+          return full; // miniatura non creabile: si mostra l'originale
+        }
+      })().finally(() => pendingThumbs.delete(tp));
+      pendingThumbs.set(tp, p);
+    }
+    return p;
+  }
 
   /** Esegue una query e converte {data, error} in Result. */
   async function run<T>(q: PromiseLike<{ data: unknown; error: unknown; status?: number }>, map: (d: any) => T): Promise<Result<T>> {
@@ -54,7 +123,7 @@ export function createApi(client: SupabaseClient) {
   async function uploadAttachment(issue: Pick<Issue, 'id' | 'project_id'>, img: PreparedImage, replyId: string | null): Promise<Result<Attachment>> {
     const path = mediaPath(issue, `att-${crypto.randomUUID()}.${img.ext}`);
     try {
-      const up = await storage().upload(path, img.blob, { contentType: mimeOf(img.ext), upsert: false });
+      const up = await putImage(path, img.blob, mimeOf(img.ext));
       if (up.error) return asError(up.error);
     } catch (e) { return asError(e); }
     return run(client.from('attachments').insert({
@@ -176,7 +245,7 @@ export function createApi(client: SupabaseClient) {
       if (screenshot) {
         const path = mediaPath(issue, 'screenshot.jpg');
         try {
-          const up = await storage().upload(path, screenshot.blob, { contentType: 'image/jpeg', upsert: false });
+          const up = await putImage(path, screenshot.blob, 'image/jpeg');
           if (!up.error) {
             const u = await updateOne('issues', issue.id, { screenshot_path: path, screenshot_bytes: screenshot.bytes });
             if (u.ok) issue = { ...issue, screenshot_path: path, screenshot_bytes: screenshot.bytes };
@@ -206,13 +275,10 @@ export function createApi(client: SupabaseClient) {
     softDeleteIssue(issueId: string) { return updateOne('issues', issueId, { deleted_at: new Date().toISOString() }); },
     softDeleteReply(replyId: string) { return updateOne('replies', replyId, { deleted_at: new Date().toISOString() }); },
 
-    async signedUrl(path: string): Promise<Result<string>> {
-      try {
-        const { data, error } = await storage().createSignedUrl(path, SIGNED_URL_SECONDS);
-        if (error || !data) return asError(error);
-        return ok(data.signedUrl);
-      } catch (e) { return asError(e); }
-    },
+    /** Link all'immagine originale (per ingrandirla). */
+    signedUrl: sign,
+    /** Link alla miniatura leggera (per board, pannelli e anteprime). */
+    thumbUrl,
 
     async profiles(): Promise<Result<Profile[]>> {
       return run(client.from('profiles').select('id, name, color'), d => (d as Profile[] | null) ?? []);
