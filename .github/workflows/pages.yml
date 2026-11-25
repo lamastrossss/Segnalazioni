@@ -15,8 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Valori pubblici per design (la anon key è protetta dalle regole RLS)
-      VITE_SUPABASE_URL: https://htdtwimhfooiuikcxxmd.supabase.co
-      VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh0ZHR3aW1oZm9vaXVpa2N4eG1kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM4MDA0NjYsImV4cCI6MjEwOTM3NjQ2Nn0.iSoXqtuR8IRe9dcBqEmLSc4ovOqL_eR4RZwDbBlSR4Q
+      VITE_SUPABASE_URL: https://swdfbkzhhqgamftumvxf.supabase.co
+      VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN3ZGZia3poaHFnYW1mdHVtdnhmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU2MDM5NzQsImV4cCI6MjExMTE3OTk3NH0.eQs2GNeoDGe3ZvVm0RWGhEeFV0y_vxDXKrKdsOe_esY
       VITE_PUBLIC_BASE_URL: https://lamastrossss.github.io/Segnalazioni/
     steps:
       - uses: actions/checkout@v4

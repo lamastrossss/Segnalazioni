@@ -20,7 +20,7 @@ Gira sul tuo account Google, gratis.
 
 | Proprietà | Valore |
 |---|---|
-| `SUPABASE_URL` | `https://htdtwimhfooiuikcxxmd.supabase.co` |
+| `SUPABASE_URL` | `https://swdfbkzhhqgamftumvxf.supabase.co` |
 | `SERVICE_ROLE_KEY` | Supabase → Project Settings → API Keys → chiave **service_role** (o *secret*) |
 | `FOLDER_ID` | l'ID della cartella del punto 1 |
 
