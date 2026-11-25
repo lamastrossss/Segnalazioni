@@ -12,7 +12,7 @@ SR_COLUMNS.forEach(function (c, i) { SR_COL[c] = i + 1; });
 
 function srFormatDate(iso, tz) {
   var d = new Date(iso);
-  if (typeof Utilities !== 'undefined') return Utilities.formatDate(d, tz, 'dd/MM/yyyy HH:mm');
+  if (typeof Utilities !== 'undefined' && Utilities.formatDate) return Utilities.formatDate(d, tz, 'dd/MM/yyyy HH:mm');
   var parts = {};
   new Intl.DateTimeFormat('it-IT', {
     timeZone: tz, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
@@ -78,12 +78,14 @@ function srRepliesText(issue, profilesById, tz) {
  * Riga del foglio per una segnalazione. urls: { <percorso storage>: link firmato }.
  * I link sono testo collegato ("Apri"), non formule HYPERLINK: le formule con più parametri
  * dipendono dalla lingua del foglio (in italiano il separatore è ";").
- * L'unica formula è IMAGE, con un solo parametro, che funziona in ogni lingua.
- * Restituisce i valori e, per le colonne con link, le parti da collegare.
+ * Niente formula IMAGE: Fogli riscaricava da Supabase tutte le immagini a ogni aggiornamento
+ * (ogni 10 minuti), esaurendo la quota di traffico. L'anteprima la inserisce sync.js una volta sola,
+ * come immagine salvata nella cella (preview è il link da cui prenderla).
+ * Restituisce i valori, l'anteprima e, per le colonne con link, le parti da collegare.
  */
 function buildRow(issue, profilesById, tz, urls) {
   var shot = issue.screenshot_path ? urls[issue.screenshot_path] || null : null;
-  // Nella cella si vede la miniatura (meno traffico su Supabase); "Apri" porta all'originale
+  // Nella cella va la miniatura (più leggera); "Apri" porta all'originale
   var preview = shot ? urls[srThumbPath(issue.screenshot_path)] || shot : null;
   var attachments = srAttachmentLinks(issue, profilesById, urls);
   var site = srFocusUrl(issue);
@@ -97,7 +99,7 @@ function buildRow(issue, profilesById, tz, urls) {
     srFormatDate(issue.created_at, tz) + (issue.edited_at ? ' · modificata ' + srFormatDate(issue.edited_at, tz) : ''),
     srSafeText(srRepliesText(issue, profilesById, tz)),
     shot ? 'Apri' : '',
-    preview ? '=IMAGE(' + srQuote(preview) + ')' : '',
+    '', // Anteprima: immagine salvata nella cella da sync.js
     attachments.map(function (a) { return a.label; }).join(', '),
     'Apri',
     issue.id,
@@ -106,7 +108,7 @@ function buildRow(issue, profilesById, tz, urls) {
   if (shot) links.push({ col: SR_COL.Screenshot, parts: [{ label: 'Apri', url: shot }] });
   if (attachments.some(function (a) { return a.url; })) links.push({ col: SR_COL.Allegati, parts: attachments });
   links.push({ col: SR_COL['Apri nel sito'], parts: [{ label: 'Apri', url: site }] });
-  return { values: values, links: links };
+  return { values: values, links: links, preview: preview };
 }
 
 if (typeof module !== 'undefined') {
@@ -122,6 +124,8 @@ var SR_SETTLE_MS = 30 * 1000;        // ignora modifiche più recenti: transazio
 var SR_BATCH = 50;
 var SR_LINK_SECONDS = 315360000;     // link alle immagini validi 10 anni
 var SR_ROW_HEIGHT = 90;              // spazio per l'anteprima dello screenshot
+var SR_PREVIEW_MAX_BYTES = 700000;   // anteprime più pesanti: solo il link "Apri"
+var SR_PREVIEW_MODE = 'cella-v1';    // anteprime salvate nelle celle (non più formule IMAGE)
 var SR_START_WATERMARK = '1970-01-01T00:00:00+00:00|00000000-0000-0000-0000-000000000000';
 var SR_WIDTHS = [48, 110, 180, 110, 320, 140, 130, 320, 80, 150, 220, 90, 60];
 
@@ -170,6 +174,7 @@ function srRun_() {
     var profiles = srIndex_(srRest_(cfg, 'get', '/rest/v1/profiles?select=id,name'));
     var projects = srIndex_(srRest_(cfg, 'get', '/rest/v1/projects?select=id,name,archive_doc_url,deleted_at'));
     srPrepareSheets_(cfg, props, projects);
+    srDropImageFormulas_(cfg, props, projects);
     var settled = encodeURIComponent(new Date(Date.now() - SR_SETTLE_MS).toISOString());
     var more = true;
     while (more && Date.now() - started < SR_MAX_RUN_MS) {
@@ -381,5 +386,41 @@ function srWriteIssue_(cfg, props, project, issue, profiles) {
     });
     sheet.getRange(row, spec.col).setRichTextValue(rt.build());
   });
-  if (built.values[SR_COL.Anteprima - 1]) sheet.setRowHeight(row, SR_ROW_HEIGHT);
+  if (built.preview && srPutPreview_(sheet, row, built.preview)) sheet.setRowHeight(row, SR_ROW_HEIGHT);
+}
+
+/**
+ * Anteprima dello screenshot salvata dentro la cella: scaricata una volta sola da Supabase.
+ * (Con =IMAGE(link) Fogli la riscaricava a ogni aggiornamento del foglio.) Se non riesce resta il link "Apri".
+ */
+function srPutPreview_(sheet, row, url) {
+  try {
+    var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return false;
+    var blob = res.getBlob();
+    var bytes = blob.getBytes();
+    if (!bytes.length || bytes.length > SR_PREVIEW_MAX_BYTES) return false;
+    var data = 'data:' + (blob.getContentType() || 'image/jpeg') + ';base64,' + Utilities.base64Encode(bytes);
+    var image = SpreadsheetApp.newCellImage().setSourceUrl(data).setAltTextTitle('Screenshot').build();
+    sheet.getRange(row, SR_COL.Anteprima).setValue(image);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Una volta sola: toglie dai fogli le vecchie formule IMAGE (che consumavano la quota di traffico)
+ * e fa riscrivere tutte le righe, così le anteprime diventano immagini salvate nelle celle.
+ */
+function srDropImageFormulas_(cfg, props, projects) {
+  if (props.getProperty('PREVIEW_MODE') === SR_PREVIEW_MODE) return;
+  Object.keys(projects).forEach(function (pid) {
+    if (!props.getProperty('sheet:' + pid) || projects[pid].deleted_at) return;
+    var sheet = srSheetFor_(cfg, props, projects[pid]);
+    var last = sheet.getLastRow();
+    if (last >= 2) sheet.getRange(2, SR_COL.Anteprima, last - 1, 1).clearContent();
+  });
+  props.deleteProperty('SHEET_WATERMARK_V2');
+  props.setProperty('PREVIEW_MODE', SR_PREVIEW_MODE);
 }

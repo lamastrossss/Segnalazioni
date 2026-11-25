@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import vm from 'node:vm';
 
 // ---- Fogli Google simulato (solo ciò che usa sync.js, con i ritorni reali di Apps Script) ----
-type Cell = string | number;
+type Cell = string | number | { image: string; alt: string };
 class Sheet {
   rows: Cell[][] = [];
   rich = new Map<string, { text: string; links: { start: number; end: number; url: string }[] }>();
@@ -37,6 +37,8 @@ class Sheet {
         return undefined; // come Apps Script: niente catene
       },
       setRichTextValue: (rt: any) => { sheet.rich.set(`${r},${c}`, rt); return undefined; },
+      setValue: (v: Cell) => { (sheet.rows[r - 1] ??= [])[c - 1] = v; return undefined; },
+      clearContent: () => { for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) if (sheet.rows[r - 1 + i]) sheet.rows[r - 1 + i][c - 1 + j] = ''; return undefined; },
       setFontWeight: () => undefined,
     };
   }
@@ -52,7 +54,7 @@ class Spreadsheet {
 }
 
 interface Row { [k: string]: any }
-function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: { failIssues?: boolean; failSign?: boolean; locked?: boolean; failPatch?: boolean } = {}) {
+function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: { failIssues?: boolean; failSign?: boolean; locked?: boolean; failPatch?: boolean; imageBytes?: number; failImage?: boolean } = {}) {
   const triggers: { fn: string; source: string }[] = [];
   const trashed: string[] = [];
   const props = new Map<string, string>([['SUPABASE_URL', 'https://sb.test'], ['SERVICE_ROLE_KEY', 'service'], ['FOLDER_ID', 'folder']]);
@@ -64,6 +66,11 @@ function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: 
   const fetch = (url: string, o: { method?: string; payload?: string } = {}) => {
     const u = new URL(url);
     const method = o.method ?? 'get';
+    if (u.pathname.startsWith('/storage/v1/object/sign/media/')) { // scaricamento di un'immagine (anteprima)
+      log.push({ method: 'get', path: u.pathname });
+      const size = opts.imageBytes ?? 3;
+      return { getResponseCode: () => (opts.failImage ? 500 : 200), getBlob: () => ({ getBytes: () => new Array(size).fill(1), getContentType: () => 'image/jpeg' }) };
+    }
     const body = o.payload ? JSON.parse(o.payload) : undefined;
     log.push({ method, path: u.pathname, body });
     if (u.pathname === '/storage/v1/object/sign/media') {
@@ -107,6 +114,7 @@ function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: 
       deleteProperty: (k: string) => { props.delete(k); },
     }) },
     UrlFetchApp: { fetch },
+    Utilities: { base64Encode: (b: number[]) => 'B64x' + b.length },
     SpreadsheetApp: {
       create: (name: string) => { const s = new Spreadsheet(`sheet${++n}`, name); sheets.set(s.id, s); return s; },
       openById: (id: string) => { const s = sheets.get(id); if (!s) throw new Error('no sheet'); return s; },
@@ -114,6 +122,11 @@ function makeEnv(db: { issues: Row[]; projects: Row[]; profiles: Row[] }, opts: 
       newDataValidation: () => {
         const rule: any = {};
         const b = { requireValueInList: (l: string[], show: boolean) => { rule.list = l; rule.show = show; return b; }, setAllowInvalid: (x: boolean) => { rule.allowInvalid = x; return b; }, build: () => rule };
+        return b;
+      },
+      newCellImage: () => {
+        const img: any = {};
+        const b = { setSourceUrl: (u: string) => { img.image = u; return b; }, setAltTextTitle: (t: string) => { img.alt = t; return b; }, build: () => img };
         return b;
       },
       newRichTextValue: () => {
@@ -163,7 +176,8 @@ describe('archivio su Fogli Google', () => {
     expect(s.frozen).toBe(1);
     expect(s.hidden).toContain(13);
     expect(ids(s)).toEqual(['i1', 'i2']);
-    expect(s.rows[1][9]).toBe('=IMAGE("https://sb.test/storage/v1/object/sign/media/p1/i1/screenshot.jpg?token=t")');
+    // anteprima salvata nella cella (scaricata una volta), niente formula IMAGE
+    expect(s.rows[1][9]).toEqual({ image: 'data:image/jpeg;base64,B64x3', alt: 'Screenshot' });
     expect(s.heights.get(2)).toBe(90);
     expect((env.db as any).status.last_error).toBeNull();
   });
@@ -390,5 +404,33 @@ describe('archivio su Fogli Google', () => {
     expect(env.props.has('sheet:p1')).toBe(false);
     expect(env.triggers.map(t => t.source)).not.toContain(rica.getId());
     expect(rica.getSheets()[0].rows[1][1]).toBe('Aperta'); // non riscritto
+  });
+
+  it('anteprime: scaricate una volta e salvate nella cella; senza riuscirci resta il link "Apri"', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] });
+    env.run();
+    const downloads = () => env.log.filter(l => l.path.startsWith('/storage/v1/object/sign/media/')).length;
+    expect(downloads()).toBe(1);
+    env.run(); env.run(); // giri successivi senza modifiche: nessun nuovo scaricamento
+    expect(downloads()).toBe(1);
+    const big = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] }, { imageBytes: 900000 });
+    big.run();
+    expect(sheetOf(big).rows[1][9]).toBe('');
+    expect(sheetOf(big).rich.get('2,9')?.text).toBe('Apri');
+    const ko = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] }, { failImage: true });
+    ko.run();
+    expect(sheetOf(ko).rows[1][9]).toBe('');
+  });
+
+  it('fogli con le vecchie formule IMAGE: tolte una volta sola e righe riscritte con le anteprime salvate', () => {
+    const env = makeEnv({ projects: [{ id: 'p1', name: 'Rica' }], profiles, issues: [issue()] });
+    env.run();
+    const s = sheetOf(env);
+    s.rows[1][9] = '=IMAGE("https://sb.test/vecchio")'; // come nei fogli creati prima
+    env.props.delete('PREVIEW_MODE');
+    env.run();
+    expect(s.rows[1][9]).toEqual({ image: 'data:image/jpeg;base64,B64x3', alt: 'Screenshot' });
+    expect(ids(s)).toEqual(['i1']);
+    expect(env.props.get('PREVIEW_MODE')).toBe('cella-v1');
   });
 });

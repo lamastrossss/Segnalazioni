@@ -22,7 +22,7 @@ describe('riga del foglio', () => {
     const { values, links } = buildRow(iss, profiles, 'Europe/Rome', urls);
     expect(values).toEqual([
       42, 'In lavorazione', '/products/opuntia', 'Mobile 375', 'Titolo troppo vicino', 'Alessandra', '04/11/2026 10:12', '',
-      'Apri', '=IMAGE("https://sb/shot?token=a")', '', 'Apri', 'i1',
+      'Apri', '', '', 'Apri', 'i1',
     ]);
     expect(links).toEqual([
       { col: 9, parts: [{ label: 'Apri', url: 'https://sb/shot?token=a' }] },
@@ -76,23 +76,19 @@ describe('riga del foglio', () => {
     expect(values[4]).toBe('\'=HYPERLINK("http://evil","x")');
   });
 
-  it('le virgolette negli URL vengono raddoppiate nella formula IMAGE', () => {
-    const { values } = buildRow(iss, profiles, 'Europe/Rome', { 'p/i1/screenshot.jpg': 'https://sb/s?q="a"' });
-    expect(values[9]).toBe('=IMAGE("https://sb/s?q=""a""")');
-  });
-
   it('se il testo è stato modificato, la data lo riporta', () => {
     const { values } = buildRow({ ...iss, edited_at: '2026-11-06T08:30:00Z' }, profiles, 'Europe/Rome', urls);
     expect(values[6]).toBe('04/11/2026 10:12 · modificata 06/11/2026 09:30');
   });
 
-  it('nella cella IMAGE usa la miniatura se c\'è, "Apri" porta sempre all\'originale', () => {
+  it('anteprima: la miniatura se c\'è, altrimenti l\'originale; mai formule IMAGE; "Apri" porta all\'originale', () => {
     expect(srThumbPath('p/i1/screenshot.jpg')).toBe('p/i1/thumb-screenshot.jpg');
     const issue = { id: 'i1', number: 1, status: 'open', page_path: '/', viewport_class: 'desktop', viewport_width: 1440, body: 'x', author_id: 'u1', created_at: '2026-11-05T10:00:00Z', page_url: 'https://s/', screenshot_path: 'p/i1/screenshot.jpg', replies: [], attachments: [] };
     const withThumb = buildRow(issue, {}, 'Europe/Rome', { 'p/i1/screenshot.jpg': 'https://full', 'p/i1/thumb-screenshot.jpg': 'https://small' });
-    expect(withThumb.values[9]).toBe('=IMAGE("https://small")');
+    expect(withThumb.values[9]).toBe('');
+    expect(withThumb.preview).toBe('https://small');
     expect(withThumb.links[0].parts[0].url).toBe('https://full');
     const old = buildRow(issue, {}, 'Europe/Rome', { 'p/i1/screenshot.jpg': 'https://full' });
-    expect(old.values[9]).toBe('=IMAGE("https://full")');
+    expect(old.preview).toBe('https://full');
   });
 });

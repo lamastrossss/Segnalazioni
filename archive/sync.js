@@ -7,6 +7,8 @@ var SR_SETTLE_MS = 30 * 1000;        // ignora modifiche più recenti: transazio
 var SR_BATCH = 50;
 var SR_LINK_SECONDS = 315360000;     // link alle immagini validi 10 anni
 var SR_ROW_HEIGHT = 90;              // spazio per l'anteprima dello screenshot
+var SR_PREVIEW_MAX_BYTES = 700000;   // anteprime più pesanti: solo il link "Apri"
+var SR_PREVIEW_MODE = 'cella-v1';    // anteprime salvate nelle celle (non più formule IMAGE)
 var SR_START_WATERMARK = '1970-01-01T00:00:00+00:00|00000000-0000-0000-0000-000000000000';
 var SR_WIDTHS = [48, 110, 180, 110, 320, 140, 130, 320, 80, 150, 220, 90, 60];
 
@@ -55,6 +57,7 @@ function srRun_() {
     var profiles = srIndex_(srRest_(cfg, 'get', '/rest/v1/profiles?select=id,name'));
     var projects = srIndex_(srRest_(cfg, 'get', '/rest/v1/projects?select=id,name,archive_doc_url,deleted_at'));
     srPrepareSheets_(cfg, props, projects);
+    srDropImageFormulas_(cfg, props, projects);
     var settled = encodeURIComponent(new Date(Date.now() - SR_SETTLE_MS).toISOString());
     var more = true;
     while (more && Date.now() - started < SR_MAX_RUN_MS) {
@@ -266,5 +269,41 @@ function srWriteIssue_(cfg, props, project, issue, profiles) {
     });
     sheet.getRange(row, spec.col).setRichTextValue(rt.build());
   });
-  if (built.values[SR_COL.Anteprima - 1]) sheet.setRowHeight(row, SR_ROW_HEIGHT);
+  if (built.preview && srPutPreview_(sheet, row, built.preview)) sheet.setRowHeight(row, SR_ROW_HEIGHT);
+}
+
+/**
+ * Anteprima dello screenshot salvata dentro la cella: scaricata una volta sola da Supabase.
+ * (Con =IMAGE(link) Fogli la riscaricava a ogni aggiornamento del foglio.) Se non riesce resta il link "Apri".
+ */
+function srPutPreview_(sheet, row, url) {
+  try {
+    var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return false;
+    var blob = res.getBlob();
+    var bytes = blob.getBytes();
+    if (!bytes.length || bytes.length > SR_PREVIEW_MAX_BYTES) return false;
+    var data = 'data:' + (blob.getContentType() || 'image/jpeg') + ';base64,' + Utilities.base64Encode(bytes);
+    var image = SpreadsheetApp.newCellImage().setSourceUrl(data).setAltTextTitle('Screenshot').build();
+    sheet.getRange(row, SR_COL.Anteprima).setValue(image);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Una volta sola: toglie dai fogli le vecchie formule IMAGE (che consumavano la quota di traffico)
+ * e fa riscrivere tutte le righe, così le anteprime diventano immagini salvate nelle celle.
+ */
+function srDropImageFormulas_(cfg, props, projects) {
+  if (props.getProperty('PREVIEW_MODE') === SR_PREVIEW_MODE) return;
+  Object.keys(projects).forEach(function (pid) {
+    if (!props.getProperty('sheet:' + pid) || projects[pid].deleted_at) return;
+    var sheet = srSheetFor_(cfg, props, projects[pid]);
+    var last = sheet.getLastRow();
+    if (last >= 2) sheet.getRange(2, SR_COL.Anteprima, last - 1, 1).clearContent();
+  });
+  props.deleteProperty('SHEET_WATERMARK_V2');
+  props.setProperty('PREVIEW_MODE', SR_PREVIEW_MODE);
 }

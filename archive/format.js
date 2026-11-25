@@ -11,7 +11,7 @@ SR_COLUMNS.forEach(function (c, i) { SR_COL[c] = i + 1; });
 
 function srFormatDate(iso, tz) {
   var d = new Date(iso);
-  if (typeof Utilities !== 'undefined') return Utilities.formatDate(d, tz, 'dd/MM/yyyy HH:mm');
+  if (typeof Utilities !== 'undefined' && Utilities.formatDate) return Utilities.formatDate(d, tz, 'dd/MM/yyyy HH:mm');
   var parts = {};
   new Intl.DateTimeFormat('it-IT', {
     timeZone: tz, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
@@ -77,12 +77,14 @@ function srRepliesText(issue, profilesById, tz) {
  * Riga del foglio per una segnalazione. urls: { <percorso storage>: link firmato }.
  * I link sono testo collegato ("Apri"), non formule HYPERLINK: le formule con più parametri
  * dipendono dalla lingua del foglio (in italiano il separatore è ";").
- * L'unica formula è IMAGE, con un solo parametro, che funziona in ogni lingua.
- * Restituisce i valori e, per le colonne con link, le parti da collegare.
+ * Niente formula IMAGE: Fogli riscaricava da Supabase tutte le immagini a ogni aggiornamento
+ * (ogni 10 minuti), esaurendo la quota di traffico. L'anteprima la inserisce sync.js una volta sola,
+ * come immagine salvata nella cella (preview è il link da cui prenderla).
+ * Restituisce i valori, l'anteprima e, per le colonne con link, le parti da collegare.
  */
 function buildRow(issue, profilesById, tz, urls) {
   var shot = issue.screenshot_path ? urls[issue.screenshot_path] || null : null;
-  // Nella cella si vede la miniatura (meno traffico su Supabase); "Apri" porta all'originale
+  // Nella cella va la miniatura (più leggera); "Apri" porta all'originale
   var preview = shot ? urls[srThumbPath(issue.screenshot_path)] || shot : null;
   var attachments = srAttachmentLinks(issue, profilesById, urls);
   var site = srFocusUrl(issue);
@@ -96,7 +98,7 @@ function buildRow(issue, profilesById, tz, urls) {
     srFormatDate(issue.created_at, tz) + (issue.edited_at ? ' · modificata ' + srFormatDate(issue.edited_at, tz) : ''),
     srSafeText(srRepliesText(issue, profilesById, tz)),
     shot ? 'Apri' : '',
-    preview ? '=IMAGE(' + srQuote(preview) + ')' : '',
+    '', // Anteprima: immagine salvata nella cella da sync.js
     attachments.map(function (a) { return a.label; }).join(', '),
     'Apri',
     issue.id,
@@ -105,7 +107,7 @@ function buildRow(issue, profilesById, tz, urls) {
   if (shot) links.push({ col: SR_COL.Screenshot, parts: [{ label: 'Apri', url: shot }] });
   if (attachments.some(function (a) { return a.url; })) links.push({ col: SR_COL.Allegati, parts: attachments });
   links.push({ col: SR_COL['Apri nel sito'], parts: [{ label: 'Apri', url: site }] });
-  return { values: values, links: links };
+  return { values: values, links: links, preview: preview };
 }
 
 if (typeof module !== 'undefined') {
